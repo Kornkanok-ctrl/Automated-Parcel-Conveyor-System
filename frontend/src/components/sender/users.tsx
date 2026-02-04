@@ -11,15 +11,13 @@ import {
   Home,
   Truck,
   AlertTriangle,
-  MessageCircle,
+  Loader2,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
-import { MOCK_RECIPIENTS, DELIVERY_COMPANIES } from "../../lib/types";
-import { addParcel, updateParcelStatus } from "../../lib/parcel-store";
-import type { Recipient, DeliveryCompany } from "../../lib/types";
+import { useRecipients, useDeliveryCompanies } from "../../hooks/useApi";
+import { apiService, type Recipient, type DeliveryCompany } from "../../services/api";
 
 interface SenderFlowProps {
   onBack: () => void;
@@ -35,6 +33,12 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   const [phoneDigits, setPhoneDigits] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [createdParcel, setCreatedParcel] = useState<any>(null);
+
+  // API hooks
+  const { recipients, recipientsByFloor, loading: recipientsLoading, error: recipientsError } = useRecipients();
+  const { deliveryCompanies, loading: companiesLoading, error: companiesError } = useDeliveryCompanies();
 
   // เพิ่ม gradient background และ floating accent
   const bgClass = "min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 relative overflow-hidden";
@@ -56,12 +60,14 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   const goToNextStep = () => {
     if (currentStep < 4) {
       setCurrentStep((prev) => (prev + 1) as Step);
+      setSubmitError(null);
     }
   };
 
   const goToPrevStep = () => {
     if (currentStep > 1) {
       setCurrentStep((prev) => (prev - 1) as Step);
+      setSubmitError(null);
     }
   };
 
@@ -69,31 +75,42 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
     if (!selectedRoom || !selectedCourier) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
 
-    // Add parcel to store (store sender full phone if provided)
-    const parcelId = addParcel({
-      roomNumber: selectedRoom.roomNumber,
-      recipientName: selectedRoom.name,
-      phoneNumber: phoneDigits || selectedRoom.phone,
-      deliveryCompany: selectedCourier.name,
-      status: "pending",
-    });
+    try {
+      // Create parcel via API
+      const parcelData = {
+        roomNumber: selectedRoom.roomNumber,
+        recipientName: selectedRoom.name,
+        phoneNumber: phoneDigits || selectedRoom.phone,
+        deliveryCompany: selectedCourier.name,
+        senderPhone: phoneDigits,
+      };
 
-    // Simulate LINE notification
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    // Update status to notified
-    updateParcelStatus(parcelId, "notified");
-
-    setIsSubmitting(false);
-    setIsComplete(true);
+      const response = await apiService.createParcel(parcelData);
+      
+      if (response.success) {
+        setCreatedParcel(response.parcel);
+        setIsComplete(true);
+      } else {
+        setSubmitError(response.message || 'เกิดข้อผิดพลาดในการส่งพัสดุ');
+      }
+    } catch (error) {
+      console.error("Submit parcel error:", error);
+      setSubmitError(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการส่งพัสดุ');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
     setCurrentStep(1);
     setSelectedRoom(null);
     setSelectedCourier(null);
+    setPhoneDigits("");
     setIsComplete(false);
+    setSubmitError(null);
+    setCreatedParcel(null);
   };
 
   const formatPhoneNumber = (phone: string) => {
@@ -103,20 +120,46 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
     return `${only.slice(0,3)}-${only.slice(3,6)}-${only.slice(6,10)}`.slice(0, 13);
   };
 
-  // Group rooms by floor
-  const roomsByFloor = MOCK_RECIPIENTS.reduce(
-    (acc: Record<string, Recipient[]>, recipient: Recipient) => {
-      const floor = recipient.roomNumber.charAt(0);
-      if (!acc[floor]) acc[floor] = [];
-      acc[floor].push(recipient);
-      return acc;
-    },
-    {} as Record<string, Recipient[]>
-  );
-
   const displayPhone = phoneDigits || selectedRoom?.phone || "";
 
-  if (isComplete) {
+  // Loading states
+  if (recipientsLoading || companiesLoading) {
+    return (
+      <div className={bgClass}>
+        {accentCircles}
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <div className="bg-white/90 rounded-2xl shadow-xl px-10 py-12 max-w-md w-full flex flex-col items-center">
+            <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">กำลังโหลดข้อมูล...</h2>
+            <p className="text-gray-500 text-center">กรุณารอสักครู่</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error states
+  if (recipientsError || companiesError) {
+    return (
+      <div className={bgClass}>
+        {accentCircles}
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <div className="bg-white/90 rounded-2xl shadow-xl px-10 py-12 max-w-md w-full flex flex-col items-center">
+            <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">เกิดข้อผิดพลาด</h2>
+            <p className="text-gray-500 text-center mb-4">
+              {recipientsError || companiesError}
+            </p>
+            <Button onClick={() => window.location.reload()} className="bg-blue-600 text-white">
+              โหลดใหม่
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isComplete && createdParcel) {
     return (
       <div className={bgClass}>
         {accentCircles}
@@ -128,7 +171,16 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
               </div>
             </div>
             <h2 className="text-3xl font-extrabold text-gray-900 mb-2">ส่งพัสดุสำเร็จ!</h2>
-            <p className="text-lg text-gray-400 mb-8">ระบบได้แจ้งเตือนไปยังผู้รับพัสดุเรียบร้อยแล้ว</p>
+            <p className="text-lg text-gray-400 mb-2">ระบบได้แจ้งเตือนไปยังผู้รับพัสดุเรียบร้อยแล้ว</p>
+            
+            {/* Tracking Number */}
+            <div className="bg-blue-50 rounded-lg p-4 mb-6 w-full">
+              <p className="text-sm text-blue-600 text-center">หมายเลขติดตาม</p>
+              <p className="text-xl font-bold text-blue-900 text-center tracking-wider">
+                {createdParcel.trackingNumber}
+              </p>
+            </div>
+            
             <div className="flex gap-3 w-full">
               <Button variant="outline" onClick={() => navigate('/user-home')} className="flex-1 bg-white border-blue-300 text-blue-700 shadow">
                 กลับหน้าหลัก
@@ -197,6 +249,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
             </div>
           ))}
         </div>
+        
         <Card className="shadow-xl border-0 bg-white/90">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -207,25 +260,25 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Error Alert */}
+            {submitError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+                <p className="text-red-700">{submitError}</p>
+              </div>
+            )}
+
             {/* Step 1: Select Room */}
             {currentStep === 1 && (
               <div className="space-y-6">
                 <p className="text-blue-400">กรุณาเลือกเลขห้องผู้รับพัสดุ</p>
                 <div className="rounded-lg border border-blue-200 bg-gradient-to-b from-white to-blue-50 p-6 shadow">
-                  {['1', '2'].map((floor) => {
-                  const roomsForFloor: Recipient[] = Array.from({ length: 5 }).map((_, idx) => {
-                    const roomNumber = `${floor}${String(idx + 1).padStart(2, '0')}`;
-                    const found = MOCK_RECIPIENTS.find((r: Recipient) => r.roomNumber === roomNumber);
-                    return (
-                      (found as Recipient) || ({ id: `room-${roomNumber}`, roomNumber, name: '', phone: '' } as Recipient)
-                    );
-                  });
-                  return (
-                    <div key={floor} className={floor === '1' ? '' : 'mt-6'}>
+                  {Object.keys(recipientsByFloor).map((floor) => (
+                    <div key={floor} className={floor !== '1' ? 'mt-6' : ''}>
                       <h4 className="mb-3 text-sm font-medium text-blue-400">ชั้น {floor}</h4>
                       <div className="grid grid-cols-3 gap-3 md:grid-cols-5">
-                        {roomsForFloor.map((room) => {
-                          const isSelected = room && selectedRoom?.id === room.id;
+                        {recipientsByFloor[floor]?.map((room) => {
+                          const isSelected = selectedRoom?.id === room.id;
                           return (
                             <button
                               key={room.id}
@@ -240,12 +293,12 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                         })}
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
                 </div>
               </div>
             )}
-            {/* Step 2: Confirm Phone (full mobile via on-screen keypad) */}
+
+            {/* Step 2: Phone Input */}
             {currentStep === 2 && selectedRoom && (
               <div className="space-y-6">
                 <p className="text-blue-400">กรุณาระบุหมายเลขโทรศัพท์มือถือของผู้ส่ง (10 หลัก)</p>
@@ -287,7 +340,8 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                       </div>
                     </div>
                   </div>
-                  {/* On-screen keypad for up to 10 digits */}
+                  
+                  {/* On-screen keypad */}
                   <div className="grid grid-cols-3 gap-3 max-w-xs mx-auto mt-4">
                     {[1,2,3,4,5,6,7,8,9].map((n) => (
                       <button
@@ -321,16 +375,19 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                       C
                     </button>
                   </div>
-                  <p className="mt-3 text-sm text-red-600">{phoneDigits.length > 0 && phoneDigits.length < 10 ? `กรุณากรอกเพิ่มอีก ${10 - phoneDigits.length} หลัก` : ''}</p>
+                  <p className="mt-3 text-sm text-red-600">
+                    {phoneDigits.length > 0 && phoneDigits.length < 10 ? `กรุณากรอกเพิ่มอีก ${10 - phoneDigits.length} หลัก` : ''}
+                  </p>
                 </div>
               </div>
             )}
-            {/* Step 3: Select Courier (Official) */}
+
+            {/* Step 3: Select Courier */}
             {currentStep === 3 && (
               <div className="space-y-6">
                 <p className="text-blue-400">กรุณาเลือกบริษัทขนส่งที่นำส่งพัสดุ</p>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {DELIVERY_COMPANIES.map((courier: DeliveryCompany) => (
+                  {deliveryCompanies.map((courier) => (
                     <div
                       key={courier.id}
                       onClick={() => setSelectedCourier(courier)}
@@ -354,12 +411,15 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                         🚚
                       </div>
                       <div className="flex-1">
-                        <Label className="block text-base font-semibold text-blue-900 cursor-pointer">
+                        <Label className={`block text-base font-semibold cursor-pointer ${
+                          selectedCourier?.id === courier.id ? 'text-white' : 'text-blue-900'
+                        }`}>
                           {courier.name}
                         </Label>
                       </div>
                     </div>
                   ))}
+                  
                   {/* Other option */}
                   <div
                     onClick={() => setSelectedCourier({ id: 'other', name: 'อื่นๆ', color: '#9CA3AF' } as DeliveryCompany)}
@@ -382,13 +442,16 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                     >
                       🚚
                     </div>
-                    <Label className="block text-base font-semibold text-blue-900 cursor-pointer">
+                    <Label className={`block text-base font-semibold cursor-pointer ${
+                      selectedCourier?.id === 'other' ? 'text-white' : 'text-blue-900'
+                    }`}>
                       อื่นๆ
                     </Label>
                   </div>
                 </div>
               </div>
             )}
+
             {/* Step 4: Confirmation */}
             {currentStep === 4 && selectedRoom && selectedCourier && (
               <div className="space-y-6">
@@ -402,8 +465,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                     <div className="flex-1">
                       <div className="text-lg text-blue-900 font-semibold">หมายเลขห้อง</div>
                       <div className="text-3xl font-extrabold text-blue-900 mt-1">{selectedRoom.roomNumber}</div>
+                      <div className="text-sm text-blue-600 mt-1">{selectedRoom.name}</div>
                     </div>
                   </div>
+                  
                   {/* Phone Card */}
                   <div className="flex items-center gap-5 bg-blue-50 rounded-2xl p-5">
                     <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700">
@@ -411,9 +476,12 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                     </div>
                     <div className="flex-1">
                       <div className="text-lg text-blue-900 font-semibold">เบอร์โทรศัพท์</div>
-                      <div className="text-3xl font-extrabold text-blue-900 mt-1 tracking-widest">{formatPhoneNumber(displayPhone)}</div>
+                      <div className="text-3xl font-extrabold text-blue-900 mt-1 tracking-widest">
+                        {formatPhoneNumber(displayPhone)}
+                      </div>
                     </div>
                   </div>
+                  
                   {/* Courier Card */}
                   <div className="flex items-center gap-5 bg-orange-50 rounded-2xl p-5">
                     <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-orange-400 to-yellow-400">
@@ -427,16 +495,19 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                 </div>
               </div>
             )}
+
             {/* Navigation Buttons */}
             <div className="mt-8 flex justify-between">
               <Button
                 variant="outline"
                 onClick={currentStep === 1 ? () => navigate('/user-home') : goToPrevStep}
                 className="gap-2 bg-white border-blue-300 text-blue-700 shadow"
+                disabled={isSubmitting}
               >
                 <ArrowLeft className="h-4 w-4" />
                 {currentStep === 1 ? "กลับหน้าหลัก" : "ย้อนกลับ"}
               </Button>
+              
               {currentStep < 4 ? (
                 <Button
                   onClick={goToNextStep}
@@ -457,7 +528,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                   className="gap-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow px-6 py-3 rounded-lg font-bold"
                 >
                   {isSubmitting ? (
-                    "กำลังดำเนินการ..."
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      กำลังดำเนินการ...
+                    </>
                   ) : (
                     "ยืนยันการส่งพัสดุ"
                   )}

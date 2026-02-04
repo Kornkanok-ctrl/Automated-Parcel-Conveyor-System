@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'x-admin-token'],
   credentials: true
 }));
 
@@ -23,6 +23,15 @@ app.use(express.urlencoded({ extended: true }));
 // Add logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  
+  // Log headers for admin routes
+  if (req.path.includes('/admin')) {
+    console.log('Admin request headers:', {
+      'x-admin-token': req.headers['x-admin-token'] ? 'present' : 'missing',
+      'content-type': req.headers['content-type']
+    });
+  }
+  
   next();
 });
 
@@ -33,11 +42,11 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: [
       '/api/health',
-      '/api/auth',
-      '/api/dashboard',
-      '/api/packages',
-      '/api/conveyor',
-      '/api/settings'
+      '/api/recipients',
+      '/api/delivery-companies',
+      '/api/parcels',
+      '/api/admin/login',
+      '/api/admin/stats'
     ]
   });
 });
@@ -53,11 +62,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-require('./app/routes/auth.routes')(app);
-require('./app/routes/dashboard.routes')(app);
-require('./app/routes/packages.routes')(app);
-require('./app/routes/conveyor.routes')(app);
-require('./app/routes/settings.routes')(app);
+require('./app/routes/recipients.routes')(app);
+require('./app/routes/parcels.routes')(app);
+require('./app/routes/admin.routes')(app);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -75,11 +82,12 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Automated Parcel Conveyor System API running on port ${PORT}`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}/api/dashboard`);
-  console.log(`📦 Packages: http://localhost:${PORT}/api/packages`);
-  console.log(`🔧 Conveyor: http://localhost:${PORT}/api/conveyor`);
-  console.log(`⚙️ Settings: http://localhost:${PORT}/api/settings`);
+  console.log(`🚀 Parcel Conveyor System API running on port ${PORT}`);
+  console.log(`📦 Recipients: http://localhost:${PORT}/api/recipients`);
+  console.log(`🚚 Delivery Companies: http://localhost:${PORT}/api/delivery-companies`);
+  console.log(`📮 Parcels: http://localhost:${PORT}/api/parcels`);
+  console.log(`👤 Admin Login: http://localhost:${PORT}/api/admin/login`);
+  console.log(`📊 Admin Stats: http://localhost:${PORT}/api/admin/stats`);
   console.log(`✅ Health Check: http://localhost:${PORT}/api/health`);
 });
 

@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "test": "jest"
   },
-  "keywords": ["conveyor", "parcel", "logistics", "automation"],
+  "keywords": ["parcel", "conveyor", "automation", "api"],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {

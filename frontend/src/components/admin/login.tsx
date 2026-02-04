@@ -14,17 +14,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiService } from "../../services/api";
 
 interface AdminLoginProps {
   onLogin: () => void;
   onBack: () => void;
 }
-
-// Mock credentials for demo
-const VALID_CREDENTIALS = {
-  username: "admin",
-  password: "admin123",
-};
 
 export function AdminLogin({ onLogin }: AdminLoginProps) {
   const navigate = useNavigate();
@@ -39,20 +34,26 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
     setError("");
     setIsLoading(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    if (
-      username === VALID_CREDENTIALS.username &&
-      password === VALID_CREDENTIALS.password
-    ) {
-      onLogin();
-      navigate("/dashboard");
-    } else {
-      setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    try {
+      console.log('Attempting login with:', { username, hasPassword: !!password });
+      
+      const response = await apiService.adminLogin({ username, password });
+      
+      console.log('Login response:', response);
+      
+      if (response.success) {
+        console.log('Login successful, token stored');
+        onLogin();
+        navigate("/dashboard");
+      } else {
+        setError(response.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+      }
+    } catch (error) {
+      console.error("Admin login error:", error);
+      setError(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -106,6 +107,7 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
                     className="pl-10 border-blue-200 focus:border-blue-400"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -122,11 +124,13 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                     className="pl-10 pr-10 border-blue-200 focus:border-blue-400"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-700"
+                    disabled={isLoading}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -138,12 +142,16 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
               </div>
 
               {error && (
-                <div className="rounded-lg bg-orange-100/60 p-3 text-sm text-orange-700">
+                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
                   {error}
                 </div>
               )}
 
-              <Button type="submit" className="w-full bg-gradient-to-r from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white font-bold shadow" disabled={isLoading}>
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white font-bold shadow" 
+                disabled={isLoading}
+              >
                 {isLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
               </Button>
 

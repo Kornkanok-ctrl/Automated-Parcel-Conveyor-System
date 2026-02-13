@@ -60,7 +60,7 @@ cd backend
 npm install 
 
 # สั่ง Docker // อย่าลืมเปิด docker 
-docker compose -up -d
+docker compose up -d --build
 
 #สั่ง Prisma ครั้งแรกเพื่อดึงข้อมูลจาก seed !!! สั่งครั้งเดียวพอ 
 prisma migrate reset

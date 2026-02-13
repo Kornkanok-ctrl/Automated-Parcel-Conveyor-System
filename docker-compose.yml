@@ -1,0 +1,72 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql
+    env_file:
+      - .env
+    ports:
+      - "${PORTDATABASE}:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: ${SSQL_PASSWORD}
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: unless-stopped
+
+  backend:
+    container_name: Node_backend
+    depends_on:
+      - mssql
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env 
+    volumes:
+      - ./backend:/app
+      - node_modules_backend:/app/node_modules
+    ports:
+      - "${PORTSERVER}:${PORTSERVER}"
+    environment:
+      - NODE_ENV=development
+    restart: always
+    entrypoint: /app/Docker/prismastudio/entrypoint.sh
+    command: ["npm", "run", "nodemon"] 
+
+  frontend:
+    container_name: Node_Frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+      - node_modules_frontend:/app/node_modules
+    ports:
+      - "${PORTCLIENT}:3000"
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=1
+    depends_on:
+      - backend
+    command: npm run dev
+
+  prisma-studio:
+    depends_on:
+      - mssql
+    container_name: prisma-studio
+    ports:
+      - '5555:5555'
+    build:
+      context: ./backend/prismastudio
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - ./backend/prisma:/app/prisma      
+
+volumes:
+  mssql_data:
+  node_modules_backend:
+  node_modules_frontend:
+
+

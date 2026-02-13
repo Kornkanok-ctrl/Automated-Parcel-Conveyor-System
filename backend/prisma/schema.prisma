@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  name String @id 
+  hash String
+}
+
+model Transport {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  transport_name String
+  status         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  transportNumbers TransportNumber[]
+}
+
+model Receiver {
+  id         String   @id @default(uuid()) @db.UniqueIdentifier
+  fullname   String
+  phone      String
+  roomNumber String
+  token_line String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  transportNumbers TransportNumber[]
+}
+
+model TransportNumber {
+  id           String   @id @default(uuid()) @db.UniqueIdentifier
+  id_transport String   @db.UniqueIdentifier
+  id_receiver  String   @db.UniqueIdentifier
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  transport Transport @relation(fields: [id_transport], references: [id])
+  receiver  Receiver  @relation(fields: [id_receiver], references: [id])
+
+  @@index([id_transport])
+  @@index([id_receiver])
+}

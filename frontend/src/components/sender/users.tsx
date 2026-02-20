@@ -301,14 +301,14 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
             {/* Step 2: Phone Input */}
             {currentStep === 2 && selectedRoom && (
               <div className="space-y-6">
-                <p className="text-blue-400">กรุณาระบุหมายเลขโทรศัพท์มือถือของผู้ส่ง (10 หลัก)</p>
+                <p className="text-blue-400">กรุณาระบุหมายเลขโทรศัพท์มือถือของผู้รับ (10 หลัก)</p>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 shadow">
                   <div className="mb-4 text-center">
                     <p className="text-sm text-blue-400">เลขห้อง</p>
                     <p className="text-4xl font-extrabold text-blue-900">{selectedRoom.roomNumber}</p>
                   </div>
                   <div className="mb-4">
-                    <p className="text-sm text-blue-400 text-center">เบอร์โทรผู้ส่ง</p>
+                    <p className="text-sm text-blue-400 text-center">เบอร์โทรผู้รับ</p>
                     <div className="mt-3 flex justify-center">
                       <div className="inline-flex items-center gap-3 rounded-lg p-3 bg-white shadow">
                         <span className="text-blue-400 self-center">+66</span>

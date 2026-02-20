@@ -81,14 +81,17 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+// app.listen(PORT, () => {
+//   console.log(`🚀 Parcel Conveyor System API running on port ${PORT}`);
+//   console.log(`📦 Recipients: http://localhost:${PORT}/api/recipients`);
+//   console.log(`🚚 Delivery Companies: http://localhost:${PORT}/api/delivery-companies`);
+//   console.log(`📮 Parcels: http://localhost:${PORT}/api/parcels`);
+//   console.log(`👤 Admin Login: http://localhost:${PORT}/api/admin/login`);
+//   console.log(`📊 Admin Stats: http://localhost:${PORT}/api/admin/stats`);
+//   console.log(`✅ Health Check: http://localhost:${PORT}/api/health`);
+// });
 app.listen(PORT, () => {
-  console.log(`🚀 Parcel Conveyor System API running on port ${PORT}`);
-  console.log(`📦 Recipients: http://localhost:${PORT}/api/recipients`);
-  console.log(`🚚 Delivery Companies: http://localhost:${PORT}/api/delivery-companies`);
-  console.log(`📮 Parcels: http://localhost:${PORT}/api/parcels`);
-  console.log(`👤 Admin Login: http://localhost:${PORT}/api/admin/login`);
-  console.log(`📊 Admin Stats: http://localhost:${PORT}/api/admin/stats`);
-  console.log(`✅ Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`it OKAY!`);
 });
 
 module.exports = app;

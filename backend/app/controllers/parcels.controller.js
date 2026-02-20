@@ -1,3 +1,5 @@
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
 // Mock parcels storage with sample data
 let parcelsStorage = [
   {
@@ -180,8 +182,6 @@ async function doCreateParcel(req, res) {
       recipientName, 
       phoneNumber, 
       deliveryCompany, 
-      senderPhone,
-      senderName 
     } = req.body;
     
     // Validation
@@ -206,10 +206,6 @@ async function doCreateParcel(req, res) {
       id: parcelIdCounter++,
       trackingNumber: generateTrackingNumber(),
       roomNumber,
-      recipientName,
-      phoneNumber: cleanPhone,
-      senderPhone: senderPhone || null,
-      senderName: senderName || null,
       deliveryCompany,
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -219,7 +215,30 @@ async function doCreateParcel(req, res) {
 
     // Add to storage
     parcelsStorage.push(newParcel);
-
+    const NewdataTransport = await prisma.transport.create({
+      data: {
+        transport_name: newParcel.deliveryCompany,
+        status: newParcel.status,
+      }
+      })
+    const NewdataReceiver = await prisma.receiver.findMany({
+      where:{
+        roomNumber: newParcel.roomNumber
+      },
+      select: {
+        id: true,
+        fullname: true,
+        phone: true,
+        token_line: true
+      }
+      })
+    await prisma.transportNumber.create({
+      data:{
+        id_transport: NewdataTransport.id,
+        id_receiver: NewdataReceiver[0].id,
+        trackingNumber: newParcel.trackingNumber,
+      }
+    })
     // Send LINE notification (simulate)
     try {
       await sendLineNotification(newParcel);

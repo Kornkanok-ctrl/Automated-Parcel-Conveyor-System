@@ -7,12 +7,37 @@ async function main() {
     // =========================
     // Admin
     // =========================
-    const admin = await prisma.Admin.create({
+    const admin = await prisma.admin.create({
         data: {
-            name:"admin",
+            name: "admin",
             hash: "admin123",
         },
     });
+    const receiver1 = await prisma.receiver.create({
+        data: {
+            fullname: "นายต่อตระกูล แซ่เล้า",
+            phone: "0812341234",
+            roomNumber: "101",
+            token_line: "tor1234",
+        }
+    })
+    const receiver2 = await prisma.receiver.create({
+        data: {
+            fullname: "นายธนภัทร สุขกรี",
+            phone: "0812345678",
+            roomNumber: "102",
+            token_line: "tor1234",
+        }
+    })
+    const receiver3 = await prisma.receiver.create({
+        data: {
+            fullname: "นางสาวกรกนก วงศ์เศรษฐโชติ",
+            phone: "08123490123",
+            roomNumber: "103",
+            token_line: "tor1234",
+        }
+    })
+
 }
 
 main()

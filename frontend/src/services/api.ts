@@ -210,6 +210,14 @@ class ApiService {
     return this.fetch<{success: boolean; parcel: Parcel}>(`/parcels/track/${trackingNumber}`);
   }
 
+  // Add this new method
+  async updateParcelStatus(parcelId: number, status: string): Promise<{success: boolean; message: string; parcel: Parcel}> {
+    return this.fetch<{success: boolean; message: string; parcel: Parcel}>(`/parcels/${parcelId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
   // Admin API methods
   async adminLogin(credentials: AdminLoginRequest): Promise<AdminLoginResponse> {
     const response = await this.fetch<AdminLoginResponse>('/admin/login', {

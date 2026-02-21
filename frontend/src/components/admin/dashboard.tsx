@@ -10,6 +10,8 @@ import {
   Clock,
   CheckCircle,
   Loader2,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,9 +35,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const navigate = useNavigate();
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
 
   const handleLogout = async () => {
     try {
@@ -46,6 +48,31 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       // Force logout even if API call fails
       onLogout();
       navigate("/login");
+    }
+  };
+
+  // Handle status update
+  const handleStatusUpdate = async (parcelId: string, newStatus: string) => {
+    try {
+      setUpdatingStatus(prev => ({ ...prev, [parcelId]: true }));
+      
+      const response = await apiService.updateParcelStatus(parcelId, newStatus);
+      
+      if (response.success) {
+        // Update the local state
+        setParcels(prevParcels => 
+          prevParcels.map(parcel => 
+            parcel.id === parcelId 
+              ? { ...parcel, status: newStatus as Parcel["status"] }
+              : parcel
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Status update error:", err);
+      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอัพเดตสถานะ');
+    } finally {
+      setUpdatingStatus(prev => ({ ...prev, [parcelId]: false }));
     }
   };
 
@@ -62,18 +89,11 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
         return;
       }
 
-      // Load parcels and stats in parallel
-      const [parcelsResponse, statsResponse] = await Promise.all([
-        apiService.getParcels({ search: searchQuery }),
-        apiService.getAdminStats()
-      ]);
+      // Load parcels only
+      const parcelsResponse = await apiService.getParcels({ search: searchQuery });
 
       if (parcelsResponse.success) {
         setParcels(parcelsResponse.parcels);
-      }
-
-      if (statsResponse.success) {
-        setStats(statsResponse.stats);
       }
     } catch (err) {
       console.error("Load data error:", err);
@@ -149,16 +169,27 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     [parcels]
   );
 
-  // สถิติเปอร์เซ็นต์แต่ละสถานะจาก API - แก้ไขการคำนวณ
-  const displayStats = useMemo(() => {
-    if (!stats) return { waiting: 0, success: 0, failed: 0 };
-    
+  // คำนวณสถิติจากข้อมูลพัสดุจริง
+  const stats = useMemo(() => {
+    const total = parcels.length;
+    const waitingCount = parcels.filter(p => 
+      p.status === 'pending' || p.status === 'notified'
+    ).length;
+    const successCount = parcels.filter(p => p.status === 'collected').length;
+    const failedCount = parcels.filter(p => p.status === 'returned').length;
+
     return {
-      waiting: stats.percentages.pending + stats.percentages.notified, // รวม pending + notified = รอรับสินค้า
-      success: stats.percentages.collected, // collected เท่านั้น = รับสินค้าแล้ว
-      failed: stats.percentages.returned,   // returned = ส่งคืนแล้ว
+      total,
+      waiting: waitingCount,
+      success: successCount,
+      failed: failedCount,
+      percentages: {
+        waiting: total > 0 ? Math.round((waitingCount / total) * 100) : 0,
+        success: total > 0 ? Math.round((successCount / total) * 100) : 0,
+        failed: total > 0 ? Math.round((failedCount / total) * 100) : 0,
+      }
     };
-  }, [stats]);
+  }, [parcels]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("th-TH", {
@@ -168,6 +199,63 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
+  };
+
+  // Render status buttons
+  const renderStatusButtons = (parcel: any) => {
+    const isUpdating = updatingStatus[parcel.id];
+    const canCollect = parcel.status === 'pending' || parcel.status === 'notified';
+    const canReturn = parcel.status === 'collected' || parcel.status === 'pending' || parcel.status === 'notified';
+    
+    if (parcel.status === 'collected') {
+      return (
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleStatusUpdate(parcel.id, 'returned')}
+            disabled={isUpdating}
+            className="h-7 w-7 p-0 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+            title="ส่งคืน"
+          >
+            {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+          </Button>
+        </div>
+      );
+    }
+    
+    if (parcel.status === 'returned') {
+      return (
+        <div className="flex gap-1">
+          <span className="text-xs text-gray-500">ส่งคืนแล้ว</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex gap-1">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => handleStatusUpdate(parcel.id, 'collected')}
+          disabled={isUpdating || !canCollect}
+          className="h-7 w-7 p-0 border-green-300 text-green-600 hover:bg-green-50 hover:border-green-400"
+          title="รับสินค้า"
+        >
+          {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => handleStatusUpdate(parcel.id, 'returned')}
+          disabled={isUpdating || !canReturn}
+          className="h-7 w-7 p-0 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+          title="ส่งคืน"
+        >
+          {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+        </Button>
+      </div>
+    );
   };
 
   if (loading) {
@@ -246,7 +334,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-blue-900">
-                {stats?.total || 0}
+                {stats.total}
               </div>
               <p className="text-xs text-blue-400">รายการ</p>
             </CardContent>
@@ -262,7 +350,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-orange-900">
-                {(stats?.pending || 0) + (stats?.notified || 0)}
+                {stats.waiting}
               </div>
               <p className="text-xs text-orange-400">รายการ</p>
             </CardContent>
@@ -278,7 +366,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-900">
-                {stats?.collected || 0}
+                {stats.success}
               </div>
               <p className="text-xs text-green-500">รายการ</p>
             </CardContent>
@@ -294,7 +382,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-red-900">
-                {stats?.returned || 0}
+                {stats.failed}
               </div>
               <p className="text-xs text-red-500">รายการ</p>
             </CardContent>
@@ -330,13 +418,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <TableHead className="text-blue-900 font-semibold">บริษัทขนส่ง</TableHead>
                         <TableHead className="text-blue-900 font-semibold">วันเวลา</TableHead>
                         <TableHead className="text-blue-900 font-semibold">สถานะ</TableHead>
+                        <TableHead className="text-blue-900 font-semibold">จัดการ</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tableData.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={6}
+                            colSpan={7}
                             className="py-12 text-center text-blue-300"
                           >
                             <Package className="h-12 w-12 mx-auto mb-4 text-blue-200" />
@@ -374,6 +463,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 {statusMap[parcel.displayStatus]?.label}
                               </span>
                             </TableCell>
+                            <TableCell>
+                              {renderStatusButtons(parcel)}
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -402,7 +494,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       fill="none"
                       stroke="#fbbf24"
                       strokeWidth="12"
-                      strokeDasharray={`${(displayStats.waiting / 100) * 314},314`}
+                      strokeDasharray={`${(stats.percentages.waiting / 100) * 314},314`}
                       strokeDashoffset="0"
                       strokeLinecap="round"
                       className="transition-all duration-1000 ease-in-out"
@@ -414,8 +506,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       fill="none"
                       stroke="#22c55e"
                       strokeWidth="12"
-                      strokeDasharray={`${(displayStats.success / 100) * 314},314`}
-                      strokeDashoffset={`${-((displayStats.waiting / 100) * 314)}`}
+                      strokeDasharray={`${(stats.percentages.success / 100) * 314},314`}
+                      strokeDashoffset={`${-((stats.percentages.waiting / 100) * 314)}`}
                       strokeLinecap="round"
                       className="transition-all duration-1000 ease-in-out"
                     />
@@ -426,15 +518,15 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       fill="none"
                       stroke="#ef4444"
                       strokeWidth="12"
-                      strokeDasharray={`${(displayStats.failed / 100) * 314},314`}
-                      strokeDashoffset={`${-(((displayStats.waiting + displayStats.success) / 100) * 314)}`}
+                      strokeDasharray={`${(stats.percentages.failed / 100) * 314},314`}
+                      strokeDashoffset={`${-(((stats.percentages.waiting + stats.percentages.success) / 100) * 314)}`}
                       strokeLinecap="round"
                       className="transition-all duration-1000 ease-in-out"
                     />
                     
                     {/* Center text */}
                     <text x="50%" y="50%" textAnchor="middle" dy=".3em" fontSize="1.8em" fill="#1e3a8a" fontWeight="bold" className="rotate-90" transform="rotate(90 60 60)">
-                      {displayStats.success}%
+                      {stats.percentages.success}%
                     </text>
                   </svg>
                 </div>
@@ -445,21 +537,21 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       <span className="inline-block w-3 h-3 rounded-full bg-orange-400" />
                       <span className="text-orange-900 text-sm font-semibold">รอรับสินค้า</span>
                     </div>
-                    <span className="text-orange-700 font-bold">{displayStats.waiting}%</span>
+                    <span className="text-orange-700 font-bold">{stats.percentages.waiting}%</span>
                   </div>
                   <div className="flex items-center justify-between p-2 rounded-lg bg-green-50">
                     <div className="flex items-center gap-2">
                       <span className="inline-block w-3 h-3 rounded-full bg-green-500" />
                       <span className="text-green-900 text-sm font-semibold">รับสินค้าแล้ว</span>
                     </div>
-                    <span className="text-green-700 font-bold">{displayStats.success}%</span>
+                    <span className="text-green-700 font-bold">{stats.percentages.success}%</span>
                   </div>
                   <div className="flex items-center justify-between p-2 rounded-lg bg-red-50">
                     <div className="flex items-center gap-2">
                       <span className="inline-block w-3 h-3 rounded-full bg-red-500" />
                       <span className="text-red-900 text-sm font-semibold">ส่งคืนแล้ว</span>
                     </div>
-                    <span className="text-red-700 font-bold">{displayStats.failed}%</span>
+                    <span className="text-red-700 font-bold">{stats.percentages.failed}%</span>
                   </div>
                 </div>
               </CardContent>

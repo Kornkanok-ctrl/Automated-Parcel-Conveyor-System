@@ -40,6 +40,19 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   const { recipients, recipientsByFloor, loading: recipientsLoading, error: recipientsError } = useRecipients();
   const { deliveryCompanies, loading: companiesLoading, error: companiesError } = useDeliveryCompanies();
 
+  // Validate phone number against selected room (เอาไว้ใช้ในการแสดงผลเท่านั้น)
+  const validatePhoneNumber = (inputPhone: string, selectedRoom: Recipient) => {
+    if (!inputPhone || inputPhone.length !== 10 || !selectedRoom?.phone) {
+      return false;
+    }
+    
+    // Get last 4 digits of both phones
+    const inputLast4 = inputPhone.slice(-4);
+    const roomPhoneLast4 = selectedRoom.phone.replace(/\D/g, '').slice(-4);
+    
+    return inputLast4 === roomPhoneLast4;
+  };
+
   // เพิ่ม gradient background และ floating accent
   const bgClass = "min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 relative overflow-hidden";
   const accentCircles = (
@@ -52,7 +65,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
   const steps = [
     { number: 1, title: "เลือกเลขห้อง", icon: Home },
-    { number: 2, title: "กรอกเบอร์โทรศัพท์", icon: Phone },
+    { number: 2, title: "ยืนยันเบอร์โทรศัพท์", icon: Phone },
     { number: 3, title: "เลือกบริษัทขนส่ง", icon: Truck },
     { number: 4, title: "ยืนยันข้อมูล", icon: Check },
   ];
@@ -78,15 +91,20 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
     setSubmitError(null);
 
     try {
+      // Validate phone number before sending to backend
+      if (!validatePhoneNumber(phoneDigits, selectedRoom)) {
+        setSubmitError(`เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาใส่เบอร์ที่ลงท้ายด้วย ${selectedRoom.phone.replace(/\D/g, '').slice(-4)}`);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Create parcel via API
       const parcelData = {
         roomNumber: selectedRoom.roomNumber,
-        recipientName: selectedRoom.name,
-        phoneNumber: phoneDigits || selectedRoom.phone,
         deliveryCompany: selectedCourier.name,
-        senderPhone: phoneDigits,
       };
 
+      console.log('Sending parcel data:', parcelData);
       const response = await apiService.createParcel(parcelData);
       
       if (response.success) {
@@ -121,6 +139,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   };
 
   const displayPhone = phoneDigits || selectedRoom?.phone || "";
+
+  // Check if current phone input is valid (สำหรับแสดงผลเท่านั้น)
+  const isPhoneValid = selectedRoom ? validatePhoneNumber(phoneDigits, selectedRoom) : false;
+  const requiredLast4 = selectedRoom?.phone?.replace(/\D/g, '').slice(-4) || '';
 
   // Loading states
   if (recipientsLoading || companiesLoading) {
@@ -260,7 +282,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Error Alert */}
+            {/* Error Alert - แสดงเฉพาะหลังจากกดยืนยันแล้ว */}
             {submitError && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
                 <AlertTriangle className="h-5 w-5 text-red-500" />
@@ -298,15 +320,22 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
               </div>
             )}
 
-            {/* Step 2: Phone Input */}
+            {/* Step 2: Phone Input - ไม่มี validation แจ้งเตือน */}
             {currentStep === 2 && selectedRoom && (
               <div className="space-y-6">
-                <p className="text-blue-400">กรุณาระบุหมายเลขโทรศัพท์มือถือของผู้รับ (10 หลัก)</p>
+                <div className="text-center">
+                  <p className="text-blue-400">กรุณายืนยันตัวตนด้วยหมายเลขโทรศัพท์ (10 หลัก)</p>
+                  <p className="text-sm text-gray-600 mt-2">
+                    เบอร์โทรฯ ต้องลงท้ายด้วย <span className="font-bold text-blue-600">{requiredLast4}</span>
+                  </p>
+                </div>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 shadow">
                   <div className="mb-4 text-center">
                     <p className="text-sm text-blue-400">เลขห้อง</p>
                     <p className="text-4xl font-extrabold text-blue-900">{selectedRoom.roomNumber}</p>
+                    <p className="text-sm text-blue-600">{selectedRoom.name}</p>
                   </div>
+                  
                   <div className="mb-4">
                     <p className="text-sm text-blue-400 text-center">เบอร์โทรผู้รับ</p>
                     <div className="mt-3 flex justify-center">
@@ -315,7 +344,9 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                         <div className="flex items-center gap-2">
                           <div className="flex gap-1">
                             {[0, 1, 2].map((i) => (
-                              <div key={i} className="flex h-12 w-10 items-center justify-center rounded-md border bg-blue-50 text-lg font-medium shadow">
+                              <div key={i} className={`flex h-12 w-10 items-center justify-center rounded-md border text-lg font-medium shadow ${
+                                phoneDigits[i] ? 'bg-blue-100 border-blue-300' : 'bg-gray-50 border-gray-200'
+                              }`}>
                                 {phoneDigits[i] ?? ""}
                               </div>
                             ))}
@@ -323,7 +354,9 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                           <div className="w-2" />
                           <div className="flex gap-1">
                             {[3, 4, 5].map((i) => (
-                              <div key={i} className="flex h-12 w-10 items-center justify-center rounded-md border bg-blue-50 text-lg font-medium shadow">
+                              <div key={i} className={`flex h-12 w-10 items-center justify-center rounded-md border text-lg font-medium shadow ${
+                                phoneDigits[i] ? 'bg-blue-100 border-blue-300' : 'bg-gray-50 border-gray-200'
+                              }`}>
                                 {phoneDigits[i] ?? ""}
                               </div>
                             ))}
@@ -331,7 +364,9 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                           <div className="w-2" />
                           <div className="flex gap-1">
                             {[6, 7, 8, 9].map((i) => (
-                              <div key={i} className="flex h-12 w-10 items-center justify-center rounded-md border bg-blue-50 text-lg font-medium shadow">
+                              <div key={i} className={`flex h-12 w-10 items-center justify-center rounded-md border text-lg font-medium shadow ${
+                                phoneDigits[i] ? 'bg-blue-100 border-blue-300' : 'bg-gray-50 border-gray-200'
+                              }`}>
                                 {phoneDigits[i] ?? ""}
                               </div>
                             ))}
@@ -347,7 +382,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                       <button
                         key={n}
                         onClick={() => {
-                          if (phoneDigits.length < 10) setPhoneDigits((p) => p + String(n));
+                          if (phoneDigits.length < 10) {
+                            setPhoneDigits((p) => p + String(n));
+                            setSubmitError(null); // เคลียร์ error เมื่อมีการพิมพ์ใหม่
+                          }
                         }}
                         className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-600 hover:text-white transition-all"
                       >
@@ -355,29 +393,41 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                       </button>
                     ))}
                     <button
-                      onClick={() => setPhoneDigits((p) => p.slice(0, -1))}
+                      onClick={() => {
+                        setPhoneDigits((p) => p.slice(0, -1));
+                        setSubmitError(null);
+                      }}
                       className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-100"
                     >
                       ←
                     </button>
                     <button
                       onClick={() => {
-                        if (phoneDigits.length < 10) setPhoneDigits((p) => p + "0");
+                        if (phoneDigits.length < 10) {
+                          setPhoneDigits((p) => p + "0");
+                          setSubmitError(null);
+                        }
                       }}
                       className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-600 hover:text-white transition-all"
                     >
                       0
                     </button>
                     <button
-                      onClick={() => setPhoneDigits("")}
+                      onClick={() => {
+                        setPhoneDigits("");
+                        setSubmitError(null);
+                      }}
                       className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-100"
                     >
                       C
                     </button>
                   </div>
-                  <p className="mt-3 text-sm text-red-600">
-                    {phoneDigits.length > 0 && phoneDigits.length < 10 ? `กรุณากรอกเพิ่มอีก ${10 - phoneDigits.length} หลัก` : ''}
-                  </p>
+                  
+                  {phoneDigits.length > 0 && phoneDigits.length < 10 && (
+                    <p className="mt-3 text-sm text-orange-600 text-center">
+                      กรุณากรอกเพิ่มอีก {10 - phoneDigits.length} หลัก
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -477,7 +527,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                     <div className="flex-1">
                       <div className="text-lg text-blue-900 font-semibold">เบอร์โทรศัพท์</div>
                       <div className="text-3xl font-extrabold text-blue-900 mt-1 tracking-widest">
-                        {formatPhoneNumber(displayPhone)}
+                        {formatPhoneNumber(phoneDigits)}
                       </div>
                     </div>
                   </div>
@@ -513,7 +563,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                   onClick={goToNextStep}
                   disabled={
                     (currentStep === 1 && !selectedRoom) ||
-                    (currentStep === 2 && phoneDigits.length < 10) ||
+                    (currentStep === 2 && phoneDigits.length !== 10) ||
                     (currentStep === 3 && !selectedCourier)
                   }
                   className="gap-2 bg-gradient-to-r from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white shadow"

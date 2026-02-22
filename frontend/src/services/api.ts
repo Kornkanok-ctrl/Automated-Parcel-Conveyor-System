@@ -114,6 +114,21 @@ export interface AdminStatsResponse {
   timestamp: string;
 }
 
+// Recipients management
+export interface UpdateRecipientRequest {
+  fullname: string;
+  phone: string;
+}
+
+export interface AdminRecipient {
+  id: string;
+  fullname: string;
+  phone: string;
+  roomNumber: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 class ApiService {
   private adminToken: string | null = null;
 
@@ -301,6 +316,34 @@ class ApiService {
   // Get current admin token (for debugging)
   getAdminToken(): string | null {
     return this.adminToken;
+  }
+
+  // Recipients management (admin only)
+  async getRecipientsForAdmin(params?: {
+    search?: string;
+    roomNumber?: string;
+  }): Promise<{success: boolean; recipients: AdminRecipient[]}> {
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.roomNumber) queryParams.append('roomNumber', params.roomNumber);
+
+    const queryString = queryParams.toString();
+    return this.fetch<{success: boolean; recipients: AdminRecipient[]}>(
+      `/admin/recipients${queryString ? `?${queryString}` : ''}`
+    );
+  }
+
+  async updateRecipient(recipientId: string, data: UpdateRecipientRequest): Promise<{success: boolean; message: string; recipient: AdminRecipient}> {
+    return this.fetch<{success: boolean; message: string; recipient: AdminRecipient}>(`/admin/recipients/${recipientId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRecipient(recipientId: string): Promise<{success: boolean; message: string}> {
+    return this.fetch<{success: boolean; message: string}>(`/admin/recipients/${recipientId}`, {
+      method: 'DELETE',
+    });
   }
 }
 

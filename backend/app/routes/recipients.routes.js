@@ -17,4 +17,9 @@ module.exports = function (app) {
 
   // Get delivery companies
   app.get('/api/delivery-companies', recipientsController.getDeliveryCompanies);
+
+  // Admin only routes
+  app.get('/api/admin/recipients', recipientsController.getRecipientsForAdmin);
+  app.put('/api/admin/recipients/:id', recipientsController.updateRecipient);
+  app.delete('/api/admin/recipients/:id', recipientsController.deleteRecipient);
 };

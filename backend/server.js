@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const lineRoutes = require('./app/routes/line.routes');
 
 // Enhanced CORS configuration
 app.use(cors({
@@ -15,7 +16,8 @@ app.use(cors({
 
 // Handle preflight requests
 app.options('*', cors());
-
+// Line webhook route
+app.use('/line/webhook', lineRoutes);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

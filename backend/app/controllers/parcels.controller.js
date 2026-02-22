@@ -2,13 +2,37 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // Mock notification service
+const lineController = require('../controllers/line.controller');
+
 const sendLineNotification = async (parcel) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`📱 LINE notification sent to ${parcel.phoneNumber} for room ${parcel.roomNumber}`);
-      resolve(true);
-    }, 1500);
-  });
+  try {
+
+    if (!parcel.lineUserId) {
+      console.log("No LINE userId found");
+      return false;
+    }
+
+    await lineController.pushMessage(parcel.lineUserId, {
+      type: 'template',
+      altText: 'มีพัสดุมาถึงแล้ว',
+      template: {
+        type: 'buttons',
+        text: `พัสดุของคุณมาถึงแล้ว\nTracking: ${parcel.trackingNumber}\nล็อกเกอร์: ${parcel.roomNumber}`,
+        actions: [
+          {
+            type: 'postback',
+            label: 'ปลดล็อค',
+            data: `action=unlock&locker=${parcel.roomNumber}&trackingID=${parcel.id}&trackingNumber=${parcel.trackingNumber}`
+          }
+        ]
+      }
+    });
+    return true;
+
+  } catch (error) {
+    console.error("LINE send error:", error);
+    return false;
+  }
 };
 
 const generateTrackingNumber = () => {
@@ -72,23 +96,25 @@ async function doCreateParcel(req, res) {
 
     // Send LINE notification (simulate)
     const newParcel = {
+      id: transportNumberData.transport.id,
       trackingNumber,
       roomNumber,
       phoneNumber: receiverData.phone,
       recipientName: receiverData.fullname,
       deliveryCompany,
-      status: 'pending'
+      status: 'pending',
+      lineUserId: transportNumberData.receiver.token_line
     };
 
     try {
-      await sendLineNotification(newParcel);
+      
       
       // Update status to notified
       await prisma.transport.update({
         where: { id: transportData.id },
         data: { status: 'notified' }
       });
-      
+      await sendLineNotification(newParcel);
       newParcel.status = 'notified';
       
     } catch (notificationError) {

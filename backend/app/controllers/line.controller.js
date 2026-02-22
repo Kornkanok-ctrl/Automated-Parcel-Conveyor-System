@@ -1,0 +1,149 @@
+const line = require("@line/bot-sdk");
+const { unlockLocker } = require("../services/locker.service");
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+const lineConfig = {
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.LINE_CHANNEL_SECRET,
+};
+
+const client = new line.Client(lineConfig);
+
+// =============================
+// Internal Handler Functions
+// =============================
+
+async function doHandleWebhook(req, res) {
+  try {
+    const events = req.body.events;
+
+    for (const event of events) {
+      // ===== รับข้อความ =====
+      if (event.type === "message" && event.message.type === "text") {
+        const userId = event.source.userId;
+        const text = event.message.text.trim();
+        const phone = text;
+        const recipient = await prisma.receiver.findFirst({
+          where: { phone: phone },
+        });
+        if (recipient) {
+          await prisma.receiver.update({
+            where: { id: recipient.id },
+            data: { token_line: userId },
+          });
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "เชื่อมบัญชีสำเร็จ ",
+          });
+        } else {
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "ไม่พบเบอร์ติดต่อ",
+          });
+        }
+      }
+
+      // ===== รับ postback =====
+      if (event.type === "postback") {
+        const data = event.postback.data;
+        const params = new URLSearchParams(data);
+        const locker = params.get("locker");
+        const trackingID = params.get("trackingID");
+        const trackingNumber = params.get("trackingNumber");
+
+        const tracking = await prisma.transport.findUnique({
+          where: { id: trackingID },
+          select: { status: true },
+        });
+
+        if (!tracking) {
+          return client.replyMessage(event.replyToken, {
+            type: "text",
+            text: "ไม่พบข้อมูลพัสดุ",
+          });
+        }
+        //กรณีปลดล็อก
+        if (data.includes("action=unlock")) {
+          if (tracking.status !== "notified") {
+            return client.replyMessage(event.replyToken, {
+              type: "text",
+              text: `Tracking: ${trackingNumber}\nพัสดุถูกนำออกไปแล้ว`,
+            });
+          }
+
+          await unlockLocker(locker);
+
+          await client.replyMessage(event.replyToken, {
+            type: "template",
+            altText: "ยืนยันการรับพัสดุ",
+            template: {
+              type: "buttons",
+              text: `ล็อกเกอร์ ${locker} เปิดแล้ว \nกรุณากดยืนยันหลังจากรับพัสดุเรียบร้อยแล้ว\nTracking: ${trackingNumber}`,
+              actions: [
+                {
+                  type: "postback",
+                  label: "ยืนยันรับพัสดุ",
+                  data: `action=confirm_pickup&trackingID=${trackingID}&trackingNumber=${trackingNumber}`,
+                },
+              ],
+            },
+          });
+          return;
+        }
+        // กรณียืนยันรับพัสดุ
+        if (data.includes("action=confirm_pickup")) {
+          if (tracking.status !== "notified") {
+            return client.replyMessage(event.replyToken, {
+              type: "text",
+              text: "พัสดุถูกยืนยันไปแล้ว",
+            });
+          }
+
+          await prisma.transport.update({
+            where: { id: trackingID },
+            data: { status: "picked_up" },
+          });
+
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: `ยืนยันรับพัสดุเรียบร้อย\nTracking: ${trackingNumber}`,
+          });
+
+          return;
+        }
+      }
+    }
+
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error("LINE webhook error:", error);
+    res.status(500).end();
+  }
+}
+
+// =============================
+// Public Controller Object
+// =============================
+
+const lineController = {
+  // Webhook handler
+  webhook: (req, res) => {
+    try {
+      doHandleWebhook(req, res);
+    } catch (error) {
+      console.error("LINE Controller Error:", error);
+      res.status(500).end();
+    }
+  },
+
+  // Helper: ส่งข้อความหา user โดยตรง (pushMessage)
+  pushMessage: async (userId, message) => {
+    try {
+      await client.pushMessage(userId, message);
+    } catch (error) {
+      console.error("Push message error:", error);
+    }
+  },
+};
+
+module.exports = lineController;

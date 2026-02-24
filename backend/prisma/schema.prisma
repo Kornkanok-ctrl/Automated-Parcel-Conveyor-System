@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlserver"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -19,7 +19,7 @@ model Admin {
 }
 
 model Transport {
-  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  id             String   @id @default(uuid())
   transport_name String
   status         String
   createdAt      DateTime @default(now())
@@ -29,7 +29,7 @@ model Transport {
 }
 
 model Receiver {
-  id         String   @id @default(uuid()) @db.UniqueIdentifier
+  id         String   @id @default(uuid())
   fullname   String
   phone      String
   roomNumber String
@@ -41,9 +41,9 @@ model Receiver {
 }
 
 model TransportNumber {
-  id             String   @id @default(uuid()) @db.UniqueIdentifier
-  id_transport   String   @db.UniqueIdentifier
-  id_receiver    String   @db.UniqueIdentifier
+  id             String   @id @default(uuid())
+  id_transport   String
+  id_receiver    String
   trackingNumber String   @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

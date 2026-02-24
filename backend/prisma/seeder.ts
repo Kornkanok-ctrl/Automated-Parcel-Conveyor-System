@@ -32,7 +32,7 @@ async function main() {
     const receiver3 = await prisma.receiver.create({
         data: {
             fullname: "นางสาวกรกนก วงศ์เศรษฐโชติ",
-            phone: "08123490123",
+            phone: "0812340123",
             roomNumber: "103",
             token_line: "tor1234",
         }

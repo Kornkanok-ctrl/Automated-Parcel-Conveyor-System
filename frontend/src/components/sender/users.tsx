@@ -40,26 +40,92 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   const { recipients, recipientsByFloor, loading: recipientsLoading, error: recipientsError } = useRecipients();
   const { deliveryCompanies, loading: companiesLoading, error: companiesError } = useDeliveryCompanies();
 
-  // Validate phone number against selected room (เอาไว้ใช้ในการแสดงผลเท่านั้น)
-  const validatePhoneNumber = (inputPhone: string, selectedRoom: Recipient) => {
-    if (!inputPhone || inputPhone.length !== 10 || !selectedRoom?.phone) {
-      return false;
-    }
-    
-    // Get last 4 digits of both phones
-    const inputLast4 = inputPhone.slice(-4);
-    const roomPhoneLast4 = selectedRoom.phone.replace(/\D/g, '').slice(-4);
-    
-    return inputLast4 === roomPhoneLast4;
+  // ดึง 6 หลักแรกจาก backend และให้ผู้ใช้กรอก 4 หลักสุดท้าย
+  const getPhonePrefix = (room: Recipient | null) => {
+    if (!room?.phone) return '';
+    return room.phone.replace(/\D/g, '').slice(0, 6);
   };
 
-  // เพิ่ม gradient background และ floating accent
-  const bgClass = "min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 relative overflow-hidden";
+  const getPhoneLast4 = (room: Recipient | null) => {
+    if (!room?.phone) return '';
+    return room.phone.replace(/\D/g, '').slice(6, 10);
+  };
+
+  // Validate: เช็คว่า 4 หลักที่ผู้ใช้กรอกตรงกับฐานข้อมูล
+  const validatePhoneNumber = (inputLast4: string, selectedRoom: Recipient) => {
+    if (!inputLast4 || inputLast4.length !== 4 || !selectedRoom?.phone) {
+      return false;
+    }
+    const roomLast4 = getPhoneLast4(selectedRoom);
+    return inputLast4 === roomLast4;
+  };
+
+  // เพิ่ม gradient background และ floating accent (เหมือน user-home)
+  const bgClass = "min-h-screen bg-gradient-to-br from-[#fdf6e9] via-[#f0f4ff] to-[#fef3e2] cursor-default overflow-hidden relative font-sans";
   const accentCircles = (
     <>
-      <div className="absolute top-0 left-0 w-[350px] h-[350px] bg-blue-100/30 rounded-full blur-3xl -z-10 -translate-x-1/3 -translate-y-1/3" />
-      <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-orange-100/30 rounded-full blur-3xl -z-10 translate-x-1/4 translate-y-1/4" />
-      <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-[#1E3A8A]/10 rounded-full blur-2xl -z-10 -translate-x-1/2 -translate-y-1/2" />
+      {/* CSS keyframes for floating animations */}
+      <style>{`
+        @keyframes floatSlow { 0%,100%{ transform:translateY(0) rotate(0deg); } 50%{ transform:translateY(-18px) rotate(6deg); } }
+        @keyframes floatMed  { 0%,100%{ transform:translateY(0) rotate(0deg); } 50%{ transform:translateY(-12px) rotate(-4deg); } }
+        @keyframes pulseSoft { 0%,100%{ opacity:0.5; transform:scale(1); } 50%{ opacity:0.8; transform:scale(1.08); } }
+        @keyframes driftRight { 0%{ transform:translateX(-100%); opacity:0; } 50%{ opacity:0.35; } 100%{ transform:translateX(100vw); opacity:0; } }
+      `}</style>
+
+      {/* Gradient mesh background */}
+      <div className="absolute inset-0 -z-20">
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-orange-50/60 via-transparent to-blue-50/40" />
+        <div className="absolute top-0 right-0 w-full h-1/2 bg-gradient-to-bl from-amber-100/30 to-transparent" />
+        <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-tr from-indigo-100/25 to-transparent" />
+      </div>
+
+      {/* Strong glow orbs — blue & yellow */}
+      <div className="absolute -top-32 -left-32 w-[700px] h-[700px] bg-[#F59E0B]/20 rounded-full blur-[160px] -z-50" />
+      <div className="absolute -bottom-40 -right-40 w-[650px] h-[650px] bg-[#1E3A8A]/15 rounded-full blur-[140px] -z-50" />
+      <div className="absolute top-1/4 right-0 w-[500px] h-[500px] bg-amber-300/15 rounded-full blur-[120px] -z-40" />
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-400/12 rounded-full blur-[110px] -z-40 translate-y-1/4 -translate-x-1/4" />
+      <div className="absolute top-1/2 left-1/2 w-[350px] h-[350px] bg-yellow-200/20 rounded-full blur-[90px] -z-30 -translate-x-1/2" />
+
+      {/* Floating decorative shapes */}
+      <div className="absolute left-[6%] top-28 w-20 h-20 bg-gradient-to-br from-orange-300/70 to-yellow-300/70 rounded-xl shadow-xl -z-10" style={{ animation: 'floatSlow 6s ease-in-out infinite' }} />
+      <div className="absolute right-[8%] top-44 w-16 h-16 bg-gradient-to-br from-blue-400/60 to-indigo-400/60 rounded-lg shadow-xl -z-10" style={{ animation: 'floatMed 5s ease-in-out infinite 0.5s' }} />
+      <div className="absolute left-[15%] bottom-24 w-14 h-14 bg-gradient-to-br from-amber-300/60 to-orange-300/60 rounded-full shadow-xl -z-10" style={{ animation: 'floatSlow 7s ease-in-out infinite 1s' }} />
+      <div className="absolute right-[12%] bottom-40 w-12 h-12 bg-gradient-to-br from-sky-300/60 to-blue-400/60 rounded-md shadow-xl -z-10" style={{ animation: 'floatMed 5.5s ease-in-out infinite 0.3s' }} />
+      <div className="absolute left-[50%] top-20 w-10 h-10 bg-gradient-to-br from-yellow-300/50 to-amber-400/50 rounded-lg shadow-lg -z-10" style={{ animation: 'floatSlow 8s ease-in-out infinite 2s' }} />
+
+      {/* Animated gradient line sliding across */}
+      <div className="absolute top-[30%] left-0 w-48 h-[2px] bg-gradient-to-r from-transparent via-amber-400/40 to-transparent -z-10" style={{ animation: 'driftRight 12s linear infinite' }} />
+      <div className="absolute top-[65%] left-0 w-36 h-[2px] bg-gradient-to-r from-transparent via-blue-400/30 to-transparent -z-10" style={{ animation: 'driftRight 15s linear infinite 4s' }} />
+
+      {/* Particle dots */}
+      {[
+        { top: '12%', left: '20%', size: 6, color: 'bg-amber-400/40', delay: '0s', dur: '4s' },
+        { top: '25%', left: '80%', size: 5, color: 'bg-blue-400/40', delay: '1s', dur: '5s' },
+        { top: '55%', left: '10%', size: 7, color: 'bg-orange-300/40', delay: '2s', dur: '6s' },
+        { top: '70%', left: '75%', size: 5, color: 'bg-indigo-300/35', delay: '0.5s', dur: '4.5s' },
+        { top: '40%', left: '90%', size: 6, color: 'bg-yellow-400/35', delay: '1.5s', dur: '5.5s' },
+        { top: '85%', left: '45%', size: 4, color: 'bg-blue-300/30', delay: '3s', dur: '7s' },
+      ].map((dot, i) => (
+        <div
+          key={i}
+          className={`absolute rounded-full ${dot.color} -z-10`}
+          style={{
+            top: dot.top, left: dot.left,
+            width: dot.size, height: dot.size,
+            animation: `pulseSoft ${dot.dur} ease-in-out infinite ${dot.delay}`,
+          }}
+        />
+      ))}
+
+      {/* Corner accents */}
+      <div className="absolute top-0 left-0 w-32 h-32 -z-10">
+        <div className="absolute top-4 left-4 w-12 h-[3px] bg-gradient-to-r from-amber-400/60 to-transparent rounded-full" />
+        <div className="absolute top-4 left-4 w-[3px] h-12 bg-gradient-to-b from-amber-400/60 to-transparent rounded-full" />
+      </div>
+      <div className="absolute bottom-0 right-0 w-32 h-32 -z-10">
+        <div className="absolute bottom-4 right-4 w-12 h-[3px] bg-gradient-to-l from-blue-400/60 to-transparent rounded-full" />
+        <div className="absolute bottom-4 right-4 w-[3px] h-12 bg-gradient-to-t from-blue-400/60 to-transparent rounded-full" />
+      </div>
     </>
   );
 
@@ -93,7 +159,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
     try {
       // Validate phone number before sending to backend
       if (!validatePhoneNumber(phoneDigits, selectedRoom)) {
-        setSubmitError(`เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาใส่เบอร์ที่ลงท้ายด้วย ${selectedRoom.phone.replace(/\D/g, '').slice(-4)}`);
+        setSubmitError(`เบอร์ 4 หลักสุดท้ายไม่ตรงกับข้อมูลในระบบ`);
         setIsSubmitting(false);
         return;
       }
@@ -140,9 +206,11 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
   const displayPhone = phoneDigits || selectedRoom?.phone || "";
 
-  // Check if current phone input is valid (สำหรับแสดงผลเท่านั้น)
+  // Derived phone values
+  const phonePrefix = getPhonePrefix(selectedRoom);
+  const requiredLast4 = getPhoneLast4(selectedRoom);
+  const fullPhoneNumber = phonePrefix + phoneDigits;
   const isPhoneValid = selectedRoom ? validatePhoneNumber(phoneDigits, selectedRoom) : false;
-  const requiredLast4 = selectedRoom?.phone?.replace(/\D/g, '').slice(-4) || '';
 
   // Loading states
   if (recipientsLoading || companiesLoading) {
@@ -220,30 +288,26 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   return (
     <div className={bgClass}>
       {accentCircles}
-      <header className="border-b border-blue-200 bg-white/80 backdrop-blur-md shadow-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-400 shadow-lg">
-              <Package className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-blue-900">ส่งพัสดุ</h1>
-              <p className="text-xs text-blue-400">ระบบสายพานส่งพัสดุอัตโนมัติ</p>
-            </div>
+      {/* ══════════════ Navigation Bar ══════════════ */}
+      <nav className="relative z-30 px-8 py-3 flex justify-between items-center bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate('/user-home')}>
+          <div className="p-2 bg-[#1E3A8A] rounded-xl shadow-lg shadow-[#1E3A8A]/20">
+            <Package className="w-6 h-6 text-white" />
           </div>
+          <span className="font-bold text-xl tracking-tight text-slate-800">SmartParcel</span>
         </div>
-      </header>
-      <div className="mx-auto max-w-4xl px-6 py-8">
-        <div className="mb-8 flex items-center justify-between">
+      </nav>
+      <div className="mx-auto max-w-5xl px-6 py-4">
+        <div className="mb-4 flex items-center justify-between rounded-xl bg-white/70 backdrop-blur-md border border-blue-100 shadow-lg px-8 py-3">
           {steps.map((step, index) => (
-            <div key={step.number} className="flex items-center">
+            <div key={step.number} className="flex items-center whitespace-nowrap">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold transition-colors shadow-lg ${
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-all duration-300 shadow-lg ${
                   currentStep > step.number
-                    ? "bg-gradient-to-br from-orange-400 to-yellow-400 text-white"
+                    ? "bg-gradient-to-br from-orange-400 to-yellow-400 text-white shadow-orange-300/40"
                     : currentStep === step.number
-                      ? "bg-gradient-to-br from-blue-600 to-blue-400 text-white"
-                      : "bg-blue-100 text-blue-400"
+                      ? "bg-gradient-to-br from-blue-600 to-blue-400 text-white shadow-blue-400/40 ring-2 ring-blue-200/50"
+                      : "bg-blue-50 text-blue-300 shadow-none"
                 }`}
               >
                 {currentStep > step.number ? (
@@ -253,18 +317,18 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                 )}
               </div>
               <span
-                className={`ml-2 hidden text-sm font-medium md:block ${
+                className={`ml-2 hidden text-sm font-semibold md:block transition-colors whitespace-nowrap ${
                   currentStep >= step.number
                     ? "text-blue-900"
-                    : "text-blue-400"
+                    : "text-blue-300"
                 }`}
               >
                 {step.title}
               </span>
               {index < steps.length - 1 && (
                 <div
-                  className={`mx-4 h-1 w-8 rounded-full md:w-16 ${
-                    currentStep > step.number ? "bg-gradient-to-r from-blue-600 to-blue-400" : "bg-blue-100"
+                  className={`mx-4 h-1.5 w-8 rounded-full md:w-16 transition-colors duration-300 ${
+                    currentStep > step.number ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-blue-100"
                   }`}
                 />
               )}
@@ -272,13 +336,25 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
           ))}
         </div>
         
-        <Card className="shadow-xl border-0 bg-white/90">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-400 text-sm text-white shadow">
-                {currentStep}
-              </span>
-              <span className="text-blue-900">{steps[currentStep - 1]?.title}</span>
+        <Card className="shadow-2xl border border-blue-100/60 bg-white/85 backdrop-blur-sm relative overflow-hidden">
+          {/* Decorative top gradient bar */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-amber-400 to-orange-400" />
+          <CardHeader className="pt-5 pb-2">
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-400 text-sm text-white shadow-lg shadow-blue-400/30">
+                  {currentStep}
+                </span>
+                <span className="text-blue-900 text-lg">{steps[currentStep - 1]?.title}</span>
+              </div>
+              {currentStep >= 2 && selectedRoom && (
+                <div className="flex items-center gap-2 bg-blue-100/70 rounded-lg px-4 py-1.5">
+                  <Home className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm text-blue-500">ห้อง</span>
+                  <span className="text-xl font-extrabold text-blue-900">{selectedRoom.roomNumber}</span>
+                  <span className="text-sm text-blue-600">{selectedRoom.name}</span>
+                </div>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -292,102 +368,97 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
             {/* Step 1: Select Room */}
             {currentStep === 1 && (
-              <div className="space-y-6">
-                <p className="text-blue-400">กรุณาเลือกเลขห้องผู้รับพัสดุ</p>
-                <div className="rounded-lg border border-blue-200 bg-gradient-to-b from-white to-blue-50 p-6 shadow">
-                  {Object.keys(recipientsByFloor).map((floor) => (
-                    <div key={floor} className={floor !== '1' ? 'mt-6' : ''}>
-                      <h4 className="mb-3 text-sm font-medium text-blue-400">ชั้น {floor}</h4>
-                      <div className="grid grid-cols-3 gap-3 md:grid-cols-5">
-                        {recipientsByFloor[floor]?.map((room) => {
-                          const isSelected = selectedRoom?.id === room.id;
-                          return (
-                            <button
-                              key={room.id}
-                              onClick={() => setSelectedRoom(room)}
-                              className={`rounded-lg border-2 p-4 text-center transition-all shadow hover:border-blue-600 ${
-                                isSelected ? 'border-blue-600 bg-gradient-to-br from-blue-600 to-blue-400 text-white scale-105' : 'border-blue-200 bg-white text-blue-900'
-                              }`}
-                            >
-                              <div className="text-xl font-bold">{room.roomNumber}</div>
-                            </button>
-                          );
-                        })}
+              <div className="space-y-2">
+                <p className="text-blue-400 text-sm">กรุณาเลือกเลขห้องผู้รับพัสดุ</p>
+                
+                <div className="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-100/80 via-sky-50/60 to-amber-100/70 p-3 shadow-lg">
+                  {Object.keys(recipientsByFloor).map((floor) => {
+                    const isFloorDisabled = floor !== '1';
+                    return (
+                      <div key={floor} className={floor !== '1' ? 'mt-3' : ''}>
+                        <h4 className="mb-2 text-sm font-semibold text-blue-500 text-center tracking-wide">ชั้น {floor}</h4>
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {recipientsByFloor[floor]?.map((room) => {
+                            const isSelected = !isFloorDisabled && selectedRoom?.id === room.id;
+                            return (
+                              <button
+                                key={room.id}
+                                onClick={() => !isFloorDisabled && setSelectedRoom(room)}
+                                className={`rounded-xl border-2 py-3 px-6 text-center transition-all duration-200 shadow-md w-24 ${
+                                  isFloorDisabled
+                                    ? 'border-gray-300 bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    : isSelected
+                                      ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white scale-105 shadow-blue-400/30'
+                                      : 'border-blue-200 bg-white text-blue-900 hover:bg-blue-50/60 hover:shadow-lg hover:border-blue-500 hover:-translate-y-0.5'
+                                }`}
+                              >
+                                <div className="text-xl font-bold">{room.roomNumber}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Step 2: Phone Input - ไม่มี validation แจ้งเตือน */}
+            {/* Step 2: Phone Input — 6 หลักแรกจาก backend, ผู้ใช้กรอก 4 หลักสุดท้าย */}
             {currentStep === 2 && selectedRoom && (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <p className="text-blue-400">กรุณายืนยันตัวตนด้วยหมายเลขโทรศัพท์ (10 หลัก)</p>
-                  <p className="text-sm text-gray-600 mt-2">
-                    เบอร์โทรฯ ต้องลงท้ายด้วย <span className="font-bold text-blue-600">{requiredLast4}</span>
-                  </p>
-                </div>
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 shadow">
-                  <div className="mb-4 text-center">
-                    <p className="text-sm text-blue-400">เลขห้อง</p>
-                    <p className="text-4xl font-extrabold text-blue-900">{selectedRoom.roomNumber}</p>
-                    <p className="text-sm text-blue-600">{selectedRoom.name}</p>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <p className="text-sm text-blue-400 text-center">เบอร์โทรผู้รับ</p>
-                    <div className="mt-3 flex justify-center">
-                      <div className="inline-flex items-center gap-3 rounded-lg p-3 bg-white shadow">
-                        <span className="text-blue-400 self-center">+66</span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-1">
-                            {[0, 1, 2].map((i) => (
-                              <div key={i} className={`flex h-12 w-10 items-center justify-center rounded-md border text-lg font-medium shadow ${
-                                phoneDigits[i] ? 'bg-blue-100 border-blue-300' : 'bg-gray-50 border-gray-200'
-                              }`}>
-                                {phoneDigits[i] ?? ""}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="w-2" />
-                          <div className="flex gap-1">
-                            {[3, 4, 5].map((i) => (
-                              <div key={i} className={`flex h-12 w-10 items-center justify-center rounded-md border text-lg font-medium shadow ${
-                                phoneDigits[i] ? 'bg-blue-100 border-blue-300' : 'bg-gray-50 border-gray-200'
-                              }`}>
-                                {phoneDigits[i] ?? ""}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="w-2" />
-                          <div className="flex gap-1">
-                            {[6, 7, 8, 9].map((i) => (
-                              <div key={i} className={`flex h-12 w-10 items-center justify-center rounded-md border text-lg font-medium shadow ${
-                                phoneDigits[i] ? 'bg-blue-100 border-blue-300' : 'bg-gray-50 border-gray-200'
-                              }`}>
-                                {phoneDigits[i] ?? ""}
-                              </div>
-                            ))}
-                          </div>
+              <div className="space-y-2">
+                <p className="text-red-500 text-left text-sm font-medium">กรุณายืนยันตัวตนด้วยหมายเลข (4 หลักสุดท้าย)</p>
+                <div className="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-100/80 via-sky-50/60 to-amber-100/70 p-4 shadow-lg flex flex-col justify-center">
+                  {/* Phone display */}
+                  <div className="flex justify-center mb-2">
+                    <div className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 bg-white/80 shadow-sm border border-blue-100">
+                      <span className="text-blue-400 text-sm font-medium">+66</span>
+                      <div className="flex items-center gap-1">
+                        {/* 6 หลักแรก — ดึงจาก backend */}
+                        <div className="flex gap-1">
+                          {[0, 1, 2].map((i) => (
+                            <div key={i} className="flex h-10 w-9 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-base font-bold text-blue-700">
+                              {phonePrefix[i] ?? ''}
+                            </div>
+                          ))}
+                        </div>
+                        <span className="text-blue-300 text-sm">-</span>
+                        <div className="flex gap-1">
+                          {[3, 4, 5].map((i) => (
+                            <div key={i} className="flex h-10 w-9 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-base font-bold text-blue-700">
+                              {phonePrefix[i] ?? ''}
+                            </div>
+                          ))}
+                        </div>
+                        <span className="text-blue-300 text-sm">-</span>
+                        {/* 4 หลักสุดท้าย — ผู้ใช้กรอกเอง */}
+                        <div className="flex gap-1">
+                          {[0, 1, 2, 3].map((i) => (
+                            <div key={i} className={`flex h-10 w-9 items-center justify-center rounded-md border-2 text-base font-bold transition-all ${
+                              phoneDigits[i]
+                                ? 'bg-gradient-to-b from-blue-100 to-blue-50 border-blue-400 text-blue-900'
+                                : 'bg-white border-dashed border-blue-300 text-blue-300'
+                            }`}>
+                              {phoneDigits[i] ?? '?'}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
                   </div>
                   
                   {/* On-screen keypad */}
-                  <div className="grid grid-cols-3 gap-3 max-w-xs mx-auto mt-4">
+                  <div className="flex flex-wrap justify-center gap-2 max-w-[300px] mx-auto">
                     {[1,2,3,4,5,6,7,8,9].map((n) => (
                       <button
                         key={n}
                         onClick={() => {
-                          if (phoneDigits.length < 10) {
+                          if (phoneDigits.length < 4) {
                             setPhoneDigits((p) => p + String(n));
-                            setSubmitError(null); // เคลียร์ error เมื่อมีการพิมพ์ใหม่
+                            setSubmitError(null);
                           }
                         }}
-                        className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-600 hover:text-white transition-all"
+                        className="w-20 h-12 rounded-2xl bg-white shadow-md text-xl font-semibold hover:bg-blue-600 hover:text-white transition-all border border-gray-100"
                       >
                         {n}
                       </button>
@@ -397,18 +468,18 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                         setPhoneDigits((p) => p.slice(0, -1));
                         setSubmitError(null);
                       }}
-                      className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-100"
+                      className="w-20 h-12 rounded-2xl bg-white shadow-md text-xl font-bold text-blue-600 hover:bg-blue-100 transition-all border border-gray-100"
                     >
                       ←
                     </button>
                     <button
                       onClick={() => {
-                        if (phoneDigits.length < 10) {
+                        if (phoneDigits.length < 4) {
                           setPhoneDigits((p) => p + "0");
                           setSubmitError(null);
                         }
                       }}
-                      className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-600 hover:text-white transition-all"
+                      className="w-20 h-12 rounded-2xl bg-white shadow-md text-xl font-semibold hover:bg-blue-600 hover:text-white transition-all border border-gray-100"
                     >
                       0
                     </button>
@@ -417,15 +488,25 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                         setPhoneDigits("");
                         setSubmitError(null);
                       }}
-                      className="py-3 rounded-lg bg-white shadow text-lg font-semibold hover:bg-blue-100"
+                      className="w-20 h-12 rounded-2xl bg-white shadow-md text-xl font-semibold hover:bg-red-100 text-red-500 transition-all border border-gray-100"
                     >
                       C
                     </button>
                   </div>
                   
-                  {phoneDigits.length > 0 && phoneDigits.length < 10 && (
-                    <p className="mt-3 text-sm text-orange-600 text-center">
-                      กรุณากรอกเพิ่มอีก {10 - phoneDigits.length} หลัก
+                  {phoneDigits.length > 0 && phoneDigits.length < 4 && (
+                    <p className="mt-2 text-sm text-red-500 text-center font-semibold">
+                      กรุณากรอกเพิ่มอีก {4 - phoneDigits.length} หลัก
+                    </p>
+                  )}
+                  {phoneDigits.length === 4 && !isPhoneValid && (
+                    <p className="mt-2 text-sm text-red-500 text-center font-semibold">
+                      หมายเลข 4 หลักสุดท้ายไม่ตรงกับข้อมูลในระบบ
+                    </p>
+                  )}
+                  {phoneDigits.length === 4 && isPhoneValid && (
+                    <p className="mt-2 text-sm text-green-600 text-center font-semibold">
+                      ยืนยันเบอร์โทรศัพท์สำเร็จ
                     </p>
                   )}
                 </div>
@@ -434,124 +515,136 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
             {/* Step 3: Select Courier */}
             {currentStep === 3 && (
-              <div className="space-y-6">
-                <p className="text-blue-400">กรุณาเลือกบริษัทขนส่งที่นำส่งพัสดุ</p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {deliveryCompanies.map((courier) => (
-                    <div
-                      key={courier.id}
-                      onClick={() => setSelectedCourier(courier)}
-                      className={`flex items-center gap-4 rounded-lg p-4 transition-all cursor-pointer border-2 shadow ${
-                        selectedCourier?.id === courier.id
-                          ? 'border-blue-600 ring-2 ring-offset-2 ring-blue-400 bg-gradient-to-br from-blue-600 to-blue-400 text-white scale-105'
-                          : 'border-blue-200 bg-white text-blue-900'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="courier"
-                        checked={selectedCourier?.id === courier.id}
-                        onChange={() => setSelectedCourier(courier)}
-                        className="h-5 w-5 accent-blue-600"
-                      />
+              <div className="space-y-2">
+                <p className="text-blue-400 text-sm">กรุณาเลือกบริษัทขนส่งที่นำส่งพัสดุ</p>
+                <div className="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-100/80 via-sky-50/60 to-amber-100/70 p-5 shadow-lg">
+                <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
+                  {deliveryCompanies.map((courier) => {
+                    const isSelected = selectedCourier?.id === courier.id;
+                    return (
                       <div
-                        className="flex h-16 w-16 items-center justify-center rounded-lg text-white text-3xl font-bold shadow"
-                        style={{ backgroundColor: courier.color || '#D3D3D3' }}
+                        key={courier.id}
+                        onClick={() => setSelectedCourier(courier)}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all cursor-pointer border-2 relative ${
+                          isSelected
+                            ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white shadow-lg shadow-blue-400/25'
+                            : 'border-blue-100 bg-white text-blue-900 hover:border-blue-300 hover:shadow-md'
+                        }`}
                       >
-                        🚚
-                      </div>
-                      <div className="flex-1">
-                        <Label className={`block text-base font-semibold cursor-pointer ${
-                          selectedCourier?.id === courier.id ? 'text-white' : 'text-blue-900'
+                        {isSelected && (
+                          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                        <div
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white text-lg shadow-sm"
+                          style={{ backgroundColor: courier.color || '#D3D3D3' }}
+                        >
+                          🚚
+                        </div>
+                        <span className={`text-sm font-bold leading-tight ${
+                          isSelected ? 'text-white' : 'text-blue-900'
                         }`}>
                           {courier.name}
-                        </Label>
+                        </span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   
                   {/* Other option */}
-                  <div
-                    onClick={() => setSelectedCourier({ id: 'other', name: 'อื่นๆ', color: '#9CA3AF' } as DeliveryCompany)}
-                    className={`flex items-center gap-4 rounded-lg p-4 transition-all cursor-pointer border-2 shadow ${
-                      selectedCourier?.id === 'other'
-                        ? 'border-blue-600 ring-2 ring-offset-2 ring-blue-400 bg-gradient-to-br from-blue-600 to-blue-400 text-white scale-105'
-                        : 'border-blue-200 bg-white text-blue-900'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="courier"
-                      checked={selectedCourier?.id === 'other'}
-                      onChange={() => setSelectedCourier({ id: 'other', name: 'อื่นๆ', color: '#9CA3AF' } as DeliveryCompany)}
-                      className="h-5 w-5 accent-blue-600"
-                    />
-                    <div
-                      className="flex h-16 w-16 items-center justify-center rounded-lg text-white text-3xl font-bold shadow"
-                      style={{ backgroundColor: '#9CA3AF' }}
-                    >
-                      🚚
-                    </div>
-                    <Label className={`block text-base font-semibold cursor-pointer ${
-                      selectedCourier?.id === 'other' ? 'text-white' : 'text-blue-900'
-                    }`}>
-                      อื่นๆ
-                    </Label>
-                  </div>
+                  {(() => {
+                    const isSelected = selectedCourier?.id === 'other';
+                    return (
+                      <div
+                        onClick={() => setSelectedCourier({ id: 'other', name: 'อื่นๆ', color: '#9CA3AF' } as DeliveryCompany)}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all cursor-pointer border-2 relative ${
+                          isSelected
+                            ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white shadow-lg shadow-blue-400/25'
+                            : 'border-blue-100 bg-white text-blue-900 hover:border-blue-300 hover:shadow-md'
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                        <div
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white text-lg shadow-sm"
+                          style={{ backgroundColor: '#9CA3AF' }}
+                        >
+                          🚚
+                        </div>
+                        <span className={`text-sm font-bold leading-tight ${
+                          isSelected ? 'text-white' : 'text-blue-900'
+                        }`}>
+                          อื่นๆ
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
                 </div>
               </div>
             )}
 
             {/* Step 4: Confirmation */}
             {currentStep === 4 && selectedRoom && selectedCourier && (
-              <div className="space-y-6">
-                <p className="text-blue-400">กรุณาตรวจสอบข้อมูลก่อนกดยืนยันการส่งพัสดุ</p>
-                <div className="rounded-2xl border border-gray-200 bg-white/90 p-6 shadow-lg flex flex-col gap-5">
-                  {/* Room Card */}
-                  <div className="flex items-center gap-5 bg-blue-50 rounded-2xl p-5">
-                    <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700">
-                      <Home className="w-8 h-8 text-white" />
+              <div className="space-y-2">
+                <p className="text-blue-400 text-sm">กรุณาตรวจสอบข้อมูลก่อนกดยืนยันการส่งพัสดุ</p>
+                <div className="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-100/80 via-sky-50/60 to-amber-100/70 p-4 shadow-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Room Card */}
+                    <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-blue-100 shadow-sm">
+                      <div className="flex items-center justify-center w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700">
+                        <Home className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-blue-400 font-medium">หมายเลขห้อง</div>
+                        <div className="text-2xl font-extrabold text-blue-900 leading-tight">{selectedRoom.roomNumber}</div>
+                        <div className="text-xs text-blue-500 truncate">{selectedRoom.name}</div>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <div className="text-lg text-blue-900 font-semibold">หมายเลขห้อง</div>
-                      <div className="text-3xl font-extrabold text-blue-900 mt-1">{selectedRoom.roomNumber}</div>
-                      <div className="text-sm text-blue-600 mt-1">{selectedRoom.name}</div>
+                    
+                    {/* Phone Card */}
+                    <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-blue-100 shadow-sm">
+                      <div className="flex items-center justify-center w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700">
+                        <Phone className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-blue-400 font-medium">เบอร์โทรศัพท์</div>
+                        <div className="text-lg font-extrabold text-blue-900 leading-tight tracking-wide">
+                          {formatPhoneNumber(fullPhoneNumber)}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Phone Card */}
-                  <div className="flex items-center gap-5 bg-blue-50 rounded-2xl p-5">
-                    <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700">
-                      <Phone className="w-8 h-8 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-lg text-blue-900 font-semibold">เบอร์โทรศัพท์</div>
-                      <div className="text-3xl font-extrabold text-blue-900 mt-1 tracking-widest">
-                        {formatPhoneNumber(phoneDigits)}
+                    
+                    {/* Courier Card */}
+                    <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-orange-100 shadow-sm">
+                      <div className="flex items-center justify-center w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-orange-400 to-yellow-400">
+                        <Truck className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-orange-400 font-medium">บริษัทขนส่ง</div>
+                        <div className="text-lg font-extrabold text-orange-900 leading-tight">{selectedCourier.name}</div>
                       </div>
                     </div>
                   </div>
-                  
-                  {/* Courier Card */}
-                  <div className="flex items-center gap-5 bg-orange-50 rounded-2xl p-5">
-                    <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-orange-400 to-yellow-400">
-                      <Truck className="w-8 h-8 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-lg text-orange-900 font-semibold">บริษัทขนส่ง</div>
-                      <div className="text-2xl font-extrabold text-orange-900 mt-1">{selectedCourier.name}</div>
-                    </div>
+
+                  {/* Summary banner */}
+                  <div className="mt-3 flex items-center justify-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200/60 rounded-lg px-4 py-2.5">
+                    <Check className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-semibold text-green-700">ข้อมูลครบถ้วน พร้อมยืนยันการส่งพัสดุ</span>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Navigation Buttons */}
-            <div className="mt-8 flex justify-between">
+            <div className="mt-5 flex justify-between">
               <Button
                 variant="outline"
                 onClick={currentStep === 1 ? () => navigate('/user-home') : goToPrevStep}
-                className="gap-2 bg-white border-blue-300 text-blue-700 shadow"
+                className="gap-2 bg-white/90 border-blue-200 text-blue-700 shadow-md hover:shadow-lg hover:bg-blue-50 hover:border-blue-400 transition-all duration-200 rounded-xl px-5 py-2.5"
                 disabled={isSubmitting}
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -563,10 +656,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                   onClick={goToNextStep}
                   disabled={
                     (currentStep === 1 && !selectedRoom) ||
-                    (currentStep === 2 && phoneDigits.length !== 10) ||
+                    (currentStep === 2 && (!isPhoneValid || phoneDigits.length !== 4)) ||
                     (currentStep === 3 && !selectedCourier)
                   }
-                  className="gap-2 bg-gradient-to-r from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white shadow"
+                  className="gap-2 bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white shadow-lg shadow-orange-300/30 transition-all duration-200 rounded-xl px-6 py-2.5 font-semibold"
                 >
                   ถัดไป
                   <ArrowRight className="h-4 w-4" />
@@ -575,7 +668,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="gap-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow px-6 py-3 rounded-lg font-bold"
+                  className="gap-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-400/30 px-7 py-3 rounded-xl font-bold transition-all duration-200"
                 >
                   {isSubmitting ? (
                     <>

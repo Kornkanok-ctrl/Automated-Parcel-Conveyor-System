@@ -1,16 +1,15 @@
+const { exec } = require("child_process");
+
 let unlockLocker;
 
 if (process.platform === "linux") {
-  // ===== Raspberry Pi Mode =====
-  const Gpio = require("onoff").Gpio;
+  const pinMap = {
+    101: 17,
+    102: 27,
+    103: 22,
+  };
 
   unlockLocker = async (lockerNumber) => {
-    const pinMap = {
-      1: 17,
-      2: 27,
-      3: 22,
-    };
-
     const pin = pinMap[lockerNumber];
 
     if (!pin) {
@@ -18,18 +17,20 @@ if (process.platform === "linux") {
       return;
     }
 
-    const relay = new Gpio(pin, "out");
+    exec(`gpioset -c gpiochip0 ${pin}=1`, (err) => {
+      if (err) {
+        console.error("GPIO ON error:", err);
+        return;
+      }
 
-    relay.writeSync(1);
+      setTimeout(() => {
+        exec(`gpioset -c gpiochip0 ${pin}=0`);
+      }, 3000);
+    });
 
-    setTimeout(() => {
-      relay.writeSync(0);
-    }, 3000);
-
-    console.log(`Locker ${lockerNumber} unlocked (REAL GPIO)`);
+    console.log(`Locker ${lockerNumber} unlocked (gpioset mode)`);
   };
 } else {
-  // ===== Windows / Dev Mode =====
   unlockLocker = async (lockerNumber) => {
     console.log(`MOCK MODE Unlock locker ${lockerNumber}`);
   };

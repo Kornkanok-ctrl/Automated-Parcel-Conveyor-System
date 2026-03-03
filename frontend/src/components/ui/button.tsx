@@ -25,9 +25,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       icon: "h-10 w-10",
     }
 
+    // Remove all motion/animation if className includes 'no-motion'
+    const isNoMotion = className?.includes('no-motion');
     return (
       <button
-        className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className || ""}`}
+        className={[
+          baseStyles,
+          variants[variant],
+          sizes[size],
+          className || "",
+          isNoMotion ? 'transition-none transform-none hover:scale-100 active:scale-100 duration-0 hover:shadow-none' : ''
+        ].join(' ')}
         ref={ref}
         {...props}
       />

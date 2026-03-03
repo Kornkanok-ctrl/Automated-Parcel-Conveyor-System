@@ -186,12 +186,38 @@ async function doGetParcels(req, res) {
     
     // Search functionality
     if (search) {
-      where.OR = [
+      // Map Thai status labels to English status values
+      const statusMapping = {
+        'รอรับพัสดุ': ['pending', 'notified'],
+        'รอรับ': ['pending', 'notified'],
+        'รับพัสดุแล้ว': ['collected'],
+        'รับแล้ว': ['collected'],
+        'ส่งคืนแล้ว': ['collected'],
+        'ส่งคืน': ['returned'],
+      };
+      
+      // Check if search matches any Thai status
+      let statusValues = [];
+      for (const [thaiLabel, englishStatuses] of Object.entries(statusMapping)) {
+        if (thaiLabel.includes(search) || search.includes(thaiLabel)) {
+          statusValues = [...statusValues, ...englishStatuses];
+        }
+      }
+      
+      const orConditions = [
         { trackingNumber: { contains: search, mode: 'insensitive' } },
         { receiver: { fullname: { contains: search, mode: 'insensitive' } } },
         { receiver: { roomNumber: { contains: search, mode: 'insensitive' } } },
-        { transport: { transport_name: { contains: search, mode: 'insensitive' } } }
+        { transport: { transport_name: { contains: search, mode: 'insensitive' } } },
+        { transport: { status: { contains: search, mode: 'insensitive' } } }
       ];
+      
+      // Add status filter if Thai status was matched
+      if (statusValues.length > 0) {
+        orConditions.push({ transport: { status: { in: statusValues } } });
+      }
+      
+      where.OR = orConditions;
     }
     
     // Get total count

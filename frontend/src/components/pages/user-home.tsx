@@ -152,7 +152,7 @@ export function UserHomePage() {
       />
 
       {/* ══════════════ Navigation Bar ══════════════ */}
-      <nav className="relative z-30 px-8 py-5 flex justify-between items-center bg-white/80 backdrop-blur-md border-b border-gray-100">
+      <header className="relative z-50 px-8 py-5 flex justify-between items-center bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm">
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -179,7 +179,7 @@ export function UserHomePage() {
           <LogIn className="w-4 h-4" />
           <span>เข้าสู่ระบบ Admin</span>
         </motion.button>
-      </nav>
+      </header>
 
       {/* ══════════════ MAIN CONTENT ══════════════ */}
       <main className="relative z-10 flex items-center justify-center min-h-[calc(100vh-100px)] px-6">

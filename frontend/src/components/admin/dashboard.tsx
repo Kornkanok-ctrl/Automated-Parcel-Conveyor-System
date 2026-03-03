@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -37,15 +37,16 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/Dialog";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/components/ui/tabs";
+} from "@/components/ui/Tabs";
 import { apiService, type Parcel, type AdminRecipient, type UpdateRecipientRequest } from "../../services/api";
 import { useMemo } from "react";
+import PieChart from "./PieChart";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -57,17 +58,56 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [recipients, setRecipients] = useState<AdminRecipient[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [recipientSearchQuery, setRecipientSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("parcels");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
   
   // Recipients management states
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<UpdateRecipientRequest>({ fullname: "", phone: "" });
   const [updating, setUpdating] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [confirmCloseEditOpen, setConfirmCloseEditOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState<AdminRecipient | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [successPopup, setSuccessPopup] = useState<{ show: boolean; message: string; type: 'edit' | 'delete' | 'error' } | null>(null);
+  
+  // Separate lastUpdated for each tab - อัปเดตเฉพาะเมื่อข้อมูลเปลี่ยนแปลงจริง
+  const [parcelLastUpdated, setParcelLastUpdated] = useState<Date | null>(null);
+  const [recipientLastUpdated, setRecipientLastUpdated] = useState<Date | null>(null); 
+
+  const companyColors: Record<string, string> = {
+    "Flash Express": "bg-amber-100 text-amber-600 border border-amber-200",
+    "J&T Express": "bg-red-100 text-red-600 border border-red-200",
+    "Kerry Express": "bg-orange-100 text-orange-600 border border-orange-200",
+    "Ninja Van": "bg-purple-100 text-purple-600 border border-purple-200",
+    "Thailand Post": "bg-blue-100 text-blue-600 border border-blue-200",
+    "ไปรษณีย์ไทย": "bg-blue-100 text-blue-600 border border-blue-200",
+    "SCG Express": "bg-pink-100 text-pink-600 border border-pink-200",
+    "BEST Express": "bg-cyan-100 text-cyan-600 border border-cyan-200",
+    "DHL": "bg-yellow-100 text-yellow-700 border border-yellow-200",
+    "FedEx": "bg-indigo-100 text-indigo-600 border border-indigo-200",
+    "UPS": "bg-stone-100 text-stone-700 border border-stone-200",
+    "อื่นๆ": "bg-slate-100 text-slate-600 border border-slate-200",
+  };
+
+    // pagination - parcels
+  const [parcelPage, setParcelPage] = useState(1);
+  const PARCELS_PER_PAGE = 5;
+
+  // pagination - recipients
+  const [recipientPage, setRecipientPage] = useState(1);
+  const RECIPIENTS_PER_PAGE = 5;
+
+  // Clear edit state when changing page
+  const handleRecipientPageChange = (page: number) => {
+    if (editDialogOpen) {
+      handleCancelEdit();
+    }
+    setRecipientPage(page);
+  };
 
   const handleLogout = async () => {
     try {
@@ -94,6 +134,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               : parcel
           )
         );
+        setParcelLastUpdated(new Date()); 
       }
     } catch (err) {
       console.error("Status update error:", err);
@@ -140,6 +181,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       }
 
       await Promise.all([loadParcels(), loadRecipients()]);
+      setParcelLastUpdated(new Date());
+      setRecipientLastUpdated(new Date());
     } catch (err) {
       console.error("Load data error:", err);
       
@@ -158,41 +201,86 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // Recipients management functions
   const handleEdit = (recipient: AdminRecipient) => {
-    setEditingId(recipient.id);
+    setSelectedRecipient(recipient);
     setEditForm({
       fullname: recipient.fullname,
       phone: recipient.phone
     });
+    setEditDialogOpen(true);
   };
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
+  // ตรวจสอบว่ามีการเปลี่ยนแปลงข้อมูลจริงหรือไม่
+  const hasEditChanged = selectedRecipient 
+    ? editForm.fullname !== selectedRecipient.fullname || editForm.phone !== selectedRecipient.phone
+    : false;
+
+  const handleTryCloseEdit = () => {
+    if (hasEditChanged) {
+      setConfirmCloseEditOpen(true);
+    } else {
+      handleCancelEdit();
+    }
+  };
+
+  const handleConfirmCloseEdit = () => {
+    setConfirmCloseEditOpen(false);
+    setEditDialogOpen(false);
+    setSelectedRecipient(null);
     setEditForm({ fullname: "", phone: "" });
   };
 
+  const handleCancelEdit = () => {
+    setEditDialogOpen(false);
+    setSelectedRecipient(null);
+    setEditForm({ fullname: "", phone: "" });
+  };
+
+  // Parse API error to extract clean Thai message
+  const parseApiError = (err: unknown, fallback: string): string => {
+    if (err instanceof Error) {
+      // Try to extract JSON message from "HTTP 400: Bad Request - {"success":false,"message":"..."}" format
+      const jsonMatch = err.message.match(/\{.*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.message) return parsed.message;
+        } catch { /* ignore parse error */ }
+      }
+      return err.message;
+    }
+    return fallback;
+  };
+
   const handleSaveEdit = async () => {
-    if (!editingId) return;
+    if (!selectedRecipient) return;
 
     try {
       setUpdating(true);
-      const response = await apiService.updateRecipient(editingId, editForm);
+      setEditDialogOpen(false);
+      const response = await apiService.updateRecipient(selectedRecipient.id, editForm);
 
       if (response.success) {
         setRecipients(prev => 
           prev.map(recipient => 
-            recipient.id === editingId 
+            recipient.id === selectedRecipient.id 
               ? response.recipient
               : recipient
           )
         );
-        setEditingId(null);
+        setSelectedRecipient(null);
         setEditForm({ fullname: "", phone: "" });
+        setRecipientLastUpdated(new Date());
+        setTimeout(() => {
+          setUpdating(false);
+          setSuccessPopup({ show: true, message: "แก้ไขข้อมูลสำเร็จแล้ว", type: "edit" });
+        }, 3000);
       }
     } catch (err) {
       console.error("Update recipient error:", err);
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอัพเดต');
-    } finally {
       setUpdating(false);
+      setEditDialogOpen(true);
+      const errorMsg = parseApiError(err, 'เกิดข้อผิดพลาดในการอัพเดต');
+      setSuccessPopup({ show: true, message: errorMsg, type: 'error' });
     }
   };
 
@@ -206,18 +294,23 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
     try {
       setDeleting(true);
+      setDeleteDialogOpen(false);
       const response = await apiService.deleteRecipient(selectedRecipient.id);
 
       if (response.success) {
-        setRecipients(prev => prev.filter(r => r.id !== selectedRecipient.id));
-        setDeleteDialogOpen(false);
+        setPendingDeleteId(selectedRecipient.id);
         setSelectedRecipient(null);
+        setRecipientLastUpdated(new Date());
+        setTimeout(() => {
+          setDeleting(false);
+          setSuccessPopup({ show: true, message: "ลบข้อมูลสำเร็จแล้ว", type: "delete" });
+        }, 3000);
       }
     } catch (err) {
       console.error("Delete recipient error:", err);
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลบ');
-    } finally {
       setDeleting(false);
+      const errorMsg = parseApiError(err, 'เกิดข้อผิดพลาดในการลบ');
+      setSuccessPopup({ show: true, message: errorMsg, type: 'error' });
     }
   };
 
@@ -240,6 +333,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     
     const timeoutId = setTimeout(() => {
       loadParcels().catch(console.error);
+      setParcelPage(1);
     }, 300);
     
     return () => clearTimeout(timeoutId);
@@ -251,19 +345,36 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     
     const timeoutId = setTimeout(() => {
       loadRecipients().catch(console.error);
+      setRecipientPage(1);
     }, 300);
     
     return () => clearTimeout(timeoutId);
   }, [recipientSearchQuery]);
 
+  // Auto-dismiss success popup
+  useEffect(() => {
+    if (successPopup?.show) {
+      const duration = successPopup.type === 'error' ? 5000 : 3000;
+      const timer = setTimeout(() => {
+        if (successPopup.type === 'delete' && pendingDeleteId) {
+          setRecipients(prev => prev.filter(r => r.id !== pendingDeleteId));
+          setPendingDeleteId(null);
+        }
+        setSuccessPopup(null);
+      }, duration);
+      return () => clearTimeout(timer);
+    }
+  }, [successPopup]);
+
   // Status mapping and calculations
   type ParcelStatus = "waiting" | "success" | "failed";
   const statusMap: Record<ParcelStatus, { label: string; color: string; icon: React.ReactElement }> = {
-    waiting: { label: "รอรับสินค้า", color: "bg-orange-100 text-orange-700 border-orange-200", icon: <Clock className="h-3 w-3" /> },
-    success: { label: "รับสินค้าแล้ว", color: "bg-green-100 text-green-800 border-green-200", icon: <CheckCircle className="h-3 w-3" /> },
+    waiting: { label: "รอรับพัสดุ", color: "bg-orange-100 text-orange-700 border-orange-200", icon: <Clock className="h-3 w-3" /> },
+    success: { label: "รับพัสดุแล้ว", color: "bg-green-100 text-green-800 border-green-200", icon: <CheckCircle className="h-3 w-3" /> },
     failed: { label: "ส่งคืนแล้ว", color: "bg-red-100 text-red-700 border-red-200", icon: <AlertTriangle className="h-3 w-3" /> },
   };
 
+  // Map backend status to display status
   function mapParcelStatus(status: Parcel["status"]): ParcelStatus {
     if (status === "pending") return "waiting";
     if (status === "notified") return "waiting";
@@ -272,15 +383,32 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     return "waiting";
   }
 
-  const tableData = useMemo(() =>
-    parcels.map((p) => ({
+  // Prepare table data with displayStatus and formatted timestamp
+  const tableData = useMemo(() => {
+    return parcels.map((p) => ({
       ...p,
       displayStatus: mapParcelStatus(p.status),
       timestamp: p.createdAt ? new Date(p.createdAt) : new Date(),
-    })),
-    [parcels]
-  );
+    }));
+  }, [parcels]);
 
+  // Parcels pagination 
+  const paginatedParcels = useMemo(() => {
+    const start = (parcelPage - 1) * PARCELS_PER_PAGE;
+    return tableData.slice(start, start + PARCELS_PER_PAGE);
+  }, [tableData, parcelPage]);
+
+  const totalParcelPages = Math.ceil(tableData.length / PARCELS_PER_PAGE);
+
+  // Recipients pagination
+  const paginatedRecipients = useMemo(() => {
+    const start = (recipientPage - 1) * RECIPIENTS_PER_PAGE;
+    return recipients.slice(start, start + RECIPIENTS_PER_PAGE);
+  }, [recipients, recipientPage]);
+
+  const totalRecipientPages = Math.ceil(recipients.length / RECIPIENTS_PER_PAGE);
+
+  // Stats calculations
   const stats = useMemo(() => {
     const total = parcels.length;
     const waitingCount = parcels.filter(p => 
@@ -310,62 +438,6 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       hour: "2-digit",
       minute: "2-digit",
     }).format(typeof date === 'string' ? new Date(date) : date);
-  };
-
-  const renderStatusButtons = (parcel: any) => {
-    const isUpdating = updatingStatus[parcel.id];
-    const canCollect = parcel.status === 'pending' || parcel.status === 'notified';
-    const canReturn = parcel.status === 'collected' || parcel.status === 'pending' || parcel.status === 'notified';
-    
-    if (parcel.status === 'collected') {
-      return (
-        <div className="flex gap-1">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleStatusUpdate(parcel.id.toString(), 'returned')}
-            disabled={isUpdating}
-            className="h-7 w-7 p-0 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
-            title="ส่งคืน"
-          >
-            {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-          </Button>
-        </div>
-      );
-    }
-    
-    if (parcel.status === 'returned') {
-      return (
-        <div className="flex gap-1">
-          <span className="text-xs text-gray-500">ส่งคืนแล้ว</span>
-        </div>
-      );
-    }
-    
-    return (
-      <div className="flex gap-1">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => handleStatusUpdate(parcel.id.toString(), 'collected')}
-          disabled={isUpdating || !canCollect}
-          className="h-7 w-7 p-0 border-green-300 text-green-600 hover:bg-green-50 hover:border-green-400"
-          title="รับสินค้า"
-        >
-          {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => handleStatusUpdate(parcel.id.toString(), 'returned')}
-          disabled={isUpdating || !canReturn}
-          className="h-7 w-7 p-0 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
-          title="ส่งคืน"
-        >
-          {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
-        </Button>
-      </div>
-    );
   };
 
   if (loading) {
@@ -401,45 +473,42 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 relative overflow-hidden">
-      {/* Header */}
-      <header className="border-b border-blue-200 bg-white/80 backdrop-blur-md shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-400 shadow-lg">
-              <Package className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-blue-900">
-                Admin Dashboard
-              </h1>
-              <p className="text-xs text-blue-400">
-                ระบบจัดการพัสดุและผู้รับ
-              </p>
-            </div>
+  <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#fdf6e9] via-[#f0f4ff] to-[#fef3e2] font-sans">
+
+      {/* NAVBAR */}
+      <header className="relative z-50 px-8 py-5 flex justify-between items-center bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm">
+        {/* LOGO */}
+        <div
+          onClick={() => navigate("/admin-home")}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <div className="p-2 bg-[#1E3A8A] rounded-xl shadow-lg shadow-[#1E3A8A]/20 transition-transform duration-300 group-hover:scale-110">
+            <Package className="w-6 h-6 text-white" />
           </div>
-          <Button variant="outline" onClick={handleLogout} className="gap-2 bg-white border-blue-300 text-blue-700 shadow hover:bg-blue-50">
-            <LogOut className="h-4 w-4" />
-            ออกจากระบบ
-          </Button>
+
+          <span className="font-bold text-xl tracking-tight text-slate-800 group-hover:text-blue-700 transition">
+            SmartParcel Dashboard
+          </span>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 overflow-hidden">
         {/* Accent Circles */}
         <div className="absolute top-0 left-0 w-[350px] h-[350px] bg-blue-100/30 rounded-full blur-3xl -z-10 -translate-x-1/3 -translate-y-1/3" />
         <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-orange-100/30 rounded-full blur-3xl -z-10 translate-x-1/4 translate-y-1/4" />
         <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-[#1E3A8A]/10 rounded-full blur-2xl -z-10 -translate-x-1/2 -translate-y-1/2" />
         
         {/* Stats Cards */}
-        <div className="mb-8 grid gap-4 md:grid-cols-5">
-          <Card className="bg-blue-100 border-0 shadow hover:shadow-lg transition-shadow">
+        <div className="mb-5 grid gap-4 md:grid-cols-5">
+          <Card className="bg-blue-100 border-0 shadow hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-blue-900">
                 พัสดุทั้งหมด
               </CardTitle>
-              <Package className="h-4 w-4 text-blue-400" />
+                <div className="p-2 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 transition">
+                  <Package className="h-4 w-4 text-blue-600" />
+                </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-blue-900">{stats.total}</div>
@@ -447,12 +516,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardContent>
           </Card>
           
-          <Card className="bg-orange-100 border-0 shadow hover:shadow-lg transition-shadow">
+          <Card className="bg-orange-100 border-0 shadow hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-orange-900">
-                รอรับสินค้า
+                รอรับพัสดุ
               </CardTitle>
-              <Clock className="h-4 w-4 text-orange-400" />
+                <div className="p-2 rounded-lg bg-orange-500/10 group-hover:bg-orange-500/20 transition">
+                  <Clock className="h-4 w-4 text-orange-400" />
+                </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-orange-900">{stats.waiting}</div>
@@ -460,12 +531,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardContent>
           </Card>
 
-          <Card className="bg-green-100 border-0 shadow hover:shadow-lg transition-shadow">
+          <Card className="bg-green-100 border-0 shadow hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-green-900">
-                รับสินค้าแล้ว
+                รับพัสดุแล้ว
               </CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
+               <div className="p-2 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition">
+                 <CheckCircle className="h-4 w-4 text-green-500" />
+               </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-900">{stats.success}</div>
@@ -473,12 +546,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardContent>
           </Card>
 
-          <Card className="bg-red-100 border-0 shadow hover:shadow-lg transition-shadow">
+          <Card className="bg-red-100 border-0 shadow hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-red-900">
                 ส่งคืนแล้ว
               </CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-500" />
+               <div className="p-2 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition">
+                 <AlertTriangle className="h-4 w-4 text-red-500" />
+               </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-red-900">{stats.failed}</div>
@@ -486,12 +561,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </CardContent>
           </Card>
 
-          <Card className="bg-purple-100 border-0 shadow hover:shadow-lg transition-shadow">
+          <Card className="bg-purple-100 border-0 shadow hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-purple-900">
                 ผู้รับทั้งหมด
               </CardTitle>
-              <Users className="h-4 w-4 text-purple-500" />
+               <div className="p-2 rounded-lg bg-purple-500/10 group-hover:bg-purple-500/20 transition">
+                 <Users className="h-4 w-4 text-purple-500" />
+               </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-purple-900">{recipients.length}</div>
@@ -501,84 +578,262 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
 
         {/* Tabs for Parcels and Recipients Management */}
-        <Tabs defaultValue="parcels" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-white/50 mb-8">
-            <TabsTrigger value="parcels" className="data-[state=active]:bg-white">
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value);
+          setSearchQuery("");
+          setRecipientSearchQuery("");
+          setParcelPage(1);
+          setRecipientPage(1);
+        }} className="w-full">
+          <TabsList className="mx-auto flex w-fit bg-white/10 backdrop-blur-md border border-white/20 shadow-sm mb-4 rounded-xl p-1">
+            <TabsTrigger
+              value="parcels"
+              className="
+                rounded-lg
+                outline-none focus:outline-none focus:ring-0 focus-visible:ring-0
+                hover:bg-white/40
+                data-[state=active]:bg-transparent
+                data-[state=active]:text-blue-700
+                transition-all duration-200
+              "
+            >
               <Package className="h-4 w-4 mr-2" />
               จัดการพัสดุ
+
+              <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                {parcels.length}
+              </span>
             </TabsTrigger>
-            <TabsTrigger value="recipients" className="data-[state=active]:bg-white">
+
+            <TabsTrigger
+              value="recipients"
+              className="
+                rounded-lg
+                outline-none focus:outline-none focus:ring-0 focus-visible:ring-0
+                hover:bg-white/40
+                data-[state=active]:bg-transparent
+                data-[state=active]:text-blue-700
+                transition-all duration-200
+              "
+            >
               <Users className="h-4 w-4 mr-2" />
               จัดการผู้รับ
-            </TabsTrigger>
+
+              <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                {recipients.length}
+              </span>
+            </TabsTrigger>          
           </TabsList>
 
           {/* Parcels Tab */}
           <TabsContent value="parcels">
             <Card className="bg-white/90 border-0 shadow-xl">
-              <CardHeader>
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <CardTitle className="text-blue-900">รายการพัสดุ ({parcels.length} รายการ)</CardTitle>
-                  <div className="relative w-full md:w-80">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
-                    <Input
-                      placeholder="ค้นหาพัสดุ..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 border-blue-200 focus:border-blue-400"
-                    />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg border border-blue-100 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-blue-50">
-                          <TableHead className="text-blue-900 font-semibold">Tracking</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">ห้อง</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">ผู้รับ</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">บริษัทขนส่ง</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">วันเวลา</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">สถานะ</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">จัดการ</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {tableData.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="py-12 text-center text-blue-300">
-                              <Package className="h-12 w-12 mx-auto mb-4 text-blue-200" />
-                              <p className="text-lg font-medium">
-                                {searchQuery ? "ไม่พบข้อมูลที่ค้นหา" : "ไม่มีข้อมูลพัสดุ"}
-                              </p>
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          tableData.map((parcel) => (
-                            <TableRow key={parcel.id} className="hover:bg-blue-50/50 transition-colors">
-                              <TableCell className="font-mono text-sm text-blue-900 font-semibold">
-                                {parcel.trackingNumber}
-                              </TableCell>
-                              <TableCell className="text-blue-900 font-medium">{parcel.roomNumber}</TableCell>
-                              <TableCell className="text-blue-900">{parcel.recipientName}</TableCell>
-                              <TableCell className="text-orange-900 font-medium">{parcel.deliveryCompany}</TableCell>
-                              <TableCell className="text-blue-400 text-sm">{formatDate(parcel.timestamp)}</TableCell>
-                              <TableCell>
-                                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${statusMap[parcel.displayStatus]?.color || ''}`}>
-                                  {statusMap[parcel.displayStatus]?.icon}
-                                  {statusMap[parcel.displayStatus]?.label}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                {renderStatusButtons(parcel)}
-                              </TableCell>
-                            </TableRow>
-                          ))
+                  <CardHeader className="pt-6">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+                      {/* LEFT: Title + Last Updated */}
+                      <div>
+                        <CardTitle className="text-blue-900">
+                          รายการพัสดุ ({parcels.length} รายการ)
+                        </CardTitle>
+
+                        {parcelLastUpdated && (
+                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-3">
+                            <Clock className="h-3 w-3" />
+                            อัปเดตล่าสุด: {formatDate(parcelLastUpdated)}
+                          </div>
                         )}
-                      </TableBody>
-                    </Table>
+                      </div>
+
+                      {/* RIGHT: Search */}
+                      <div className="relative w-full md:w-64">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+
+                        <Input
+                          placeholder="ค้นหารายการพัสดุ..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10 border-blue-200 focus:border-blue-400 bg-white rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+                  {/* TABLE - ด้านซ้าย (กว้างกว่า) */}
+                  <div className="xl:col-span-3">
+                    <div className="
+                      rounded-xl
+                      border border-blue-200
+                      overflow-hidden
+                      shadow-lg
+                      bg-white
+                      h-full
+                      flex flex-col
+                    ">
+                      <div className="flex-1 overflow-hidden">
+                        <Table className="border-collapse border-blue-200">
+                          <TableHeader className="border-b border-blue-200">
+                            <TableRow className="bg-blue-50 border-b border-blue-200">
+                              <TableHead className="text-blue-900 font-semibold">เลขพัสดุ</TableHead>
+                              <TableHead className="text-blue-900 font-semibold">ห้อง</TableHead>
+                              <TableHead className="text-blue-900 font-semibold">ชื่อผู้รับ</TableHead>
+                              <TableHead className="text-blue-900 font-semibold">บริษัทขนส่ง</TableHead>
+                              <TableHead className="text-blue-900 font-semibold">วันที่-เวลา</TableHead>
+                              <TableHead className="text-blue-900 font-semibold">สถานะ</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {tableData.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={6} className="h-[280px]">
+                                  <div className="flex flex-col items-center justify-center h-full">
+                                    <Package className="h-12 w-12 mb-4 text-blue-300" />
+                                    <p className="text-lg font-medium text-blue-400">
+                                      {searchQuery ? "ไม่พบข้อมูลที่ค้นหา" : "ไม่มีข้อมูลพัสดุ"}
+                                    </p>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              paginatedParcels.map((parcel) => (
+                                <TableRow
+                                  key={parcel.id}
+                                  className="
+                                    h-14
+                                    border-b border-blue-100
+                                    transition-all duration-300
+                                    hover:bg-gradient-to-r hover:from-blue-50 hover:to-orange-50
+                                    even:bg-slate-50/50
+                                  "
+                                >
+                                  {/* Tracking */}
+                                  <TableCell className="font-medium text-blue-600">
+                                    <span className="bg-blue-100 px-2 py-1 rounded-md">
+                                      {parcel.trackingNumber}
+                                    </span>
+                                  </TableCell>
+
+                                  {/* Room */}
+                                  <TableCell className="text-gray-500 font-medium">
+                                    {parcel.roomNumber}
+                                  </TableCell>
+
+                                  {/* Recipient */}
+                                  <TableCell className="text-gray-500 font-medium">
+                                    {parcel.recipientName}
+                                  </TableCell>
+
+                                  {/* Company */}
+                                  <TableCell>
+                                    <span
+                                      className={`
+                                        px-3 py-1 rounded-lg text-sm
+                                        font-medium
+                                        ${companyColors[parcel.deliveryCompany] || companyColors["อื่นๆ"]}
+                                      `}
+                                    >
+                                      {parcel.deliveryCompany}
+                                    </span>
+                                  </TableCell>
+
+                                  {/* Date */}
+                                  <TableCell className="text-gray-500 font-medium">
+                                    {formatDate(parcel.timestamp)}
+                                  </TableCell>
+
+                                  {/* Status */}
+                                  <TableCell>
+                                    <span
+                                      className={`
+                                        inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border
+                                        transition-all duration-300 hover:scale-105
+                                        ${statusMap[parcel.displayStatus]?.color}
+                                      `}
+                                    >
+                                      {statusMap[parcel.displayStatus]?.icon}
+                                      {statusMap[parcel.displayStatus]?.label}
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination Controls */}
+                      <div className="flex items-center justify-between px-4 py-3 border-t border-blue-100 bg-gradient-to-r from-blue-50/50 to-white mt-auto">
+                        <div className="text-sm text-gray-500 font-medium">
+                          แสดง <span className="text-blue-600">{tableData.length > 0 ? ((parcelPage - 1) * PARCELS_PER_PAGE) + 1 : 0}-{Math.min(parcelPage * PARCELS_PER_PAGE, tableData.length)}</span> จาก <span className="text-blue-600">{tableData.length}</span> รายการ
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={parcelPage === 1}
+                            onClick={() => setParcelPage(parcelPage - 1)}
+                            className="h-8 px-3 border-blue-200 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-40"
+                          >
+                            <span className="text-xs">‹ ก่อนหน้า</span>
+                          </Button>
+                          
+                          <div className="flex items-center gap-1 mx-1">
+                            {Array.from({ length: totalParcelPages }, (_, i) => i + 1)
+                              .filter(page => {
+                                if (totalParcelPages <= 5) return true;
+                                if (page === 1 || page === totalParcelPages) return true;
+                                if (Math.abs(page - parcelPage) <= 1) return true;
+                                return false;
+                              })
+                              .map((page, idx, arr) => (
+                                <Fragment key={page}>
+                                  {idx > 0 && arr[idx - 1] !== page - 1 && (
+                                    <span className="text-gray-400 px-1">...</span>
+                                  )}
+                                  <Button
+                                    variant={parcelPage === page ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setParcelPage(page)}
+                                    className={`h-8 w-8 p-0 text-xs font-medium transition-all ${
+                                      parcelPage === page 
+                                        ? "bg-blue-600 text-white shadow-md hover:bg-blue-700" 
+                                        : "border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                                    }`}
+                                  >
+                                    {page}
+                                  </Button>
+                                </Fragment>
+                              ))
+                            }
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={parcelPage === totalParcelPages || totalParcelPages === 0}
+                            onClick={() => setParcelPage(parcelPage + 1)}
+                            className="h-8 px-3 border-blue-200 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-40"
+                          >
+                            <span className="text-xs">ถัดไป ›</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PIE CHART - ด้านขวา */}
+                  <div className="xl:col-span-1">
+                    {/* Pie Chart Card */}
+                    <div className="rounded-xl border border-blue-200 shadow-lg bg-white p-4 h-full flex flex-col">
+                      <h3 className="font-semibold text-blue-900 mb-3 text-center text-sm">
+                        สถิติพัสดุ
+                      </h3>
+                      <div className="flex-1 flex items-center">
+                        <PieChart stats={stats} />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -588,29 +843,52 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           {/* Recipients Tab */}
           <TabsContent value="recipients">
             <Card className="bg-white/90 border-0 shadow-xl">
-              <CardHeader>
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <CardTitle className="text-blue-900">จัดการผู้รับ ({recipients.length} คน)</CardTitle>
-                  <div className="relative w-full md:w-80">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
-                    <Input
-                      placeholder="ค้นหาชื่อ, เบอร์โทร, หรือห้อง..."
-                      value={recipientSearchQuery}
-                      onChange={(e) => setRecipientSearchQuery(e.target.value)}
-                      className="pl-10 border-blue-200 focus:border-blue-400"
-                    />
-                  </div>
-                </div>
-              </CardHeader>
+              <CardHeader className="pt-6">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+                      {/* LEFT: Title + Last Updated */}
+                      <div>
+                        <CardTitle className="text-blue-900">
+                          จัดการผู้รับ ({recipients.length} คน)
+                        </CardTitle>
+
+                        {recipientLastUpdated && (
+                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-3">
+                            <Clock className="h-3 w-3" />
+                            อัปเดตล่าสุด: {formatDate(recipientLastUpdated)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* RIGHT: Search */}
+                      <div className="relative w-full md:w-64">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+
+                        <Input
+                          placeholder="ค้นหาข้อมูลผู้รับ..."
+                          value={recipientSearchQuery}
+                          onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                          className="pl-10 border-blue-200 focus:border-blue-400 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
               <CardContent>
-                <div className="rounded-lg border border-blue-100 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-blue-50">
+                <div className="
+                    rounded-xl
+                    border border-blue-200
+                    overflow-hidden
+                    shadow-lg
+                    bg-white
+                    flex flex-col
+                  ">
+                  <div className="flex-1 overflow-hidden"> 
+                    <Table className="border-collapse border-blue-200">
+                      <TableHeader className="border-b border-blue-200">
+                        <TableRow className="bg-blue-50 border-b border-blue-200">
                           <TableHead className="text-blue-900 font-semibold">ห้อง</TableHead>
                           <TableHead className="text-blue-900 font-semibold">ชื่อผู้รับ</TableHead>
-                          <TableHead className="text-blue-900 font-semibold">เบอร์โทร</TableHead>
+                          <TableHead className="text-blue-900 font-semibold">เบอร์โทรศัพท์</TableHead>
                           <TableHead className="text-blue-900 font-semibold">วันที่สร้าง</TableHead>
                           <TableHead className="text-blue-900 font-semibold">จัดการ</TableHead>
                         </TableRow>
@@ -618,102 +896,129 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       <TableBody>
                         {recipients.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="py-12 text-center text-blue-300">
-                              <Users className="h-12 w-12 mx-auto mb-4 text-blue-200" />
-                              <p className="text-lg font-medium">
-                                {recipientSearchQuery ? "ไม่พบข้อมูลที่ค้นหา" : "ไม่มีข้อมูลผู้รับ"}
-                              </p>
+                            <TableCell colSpan={5} className="h-[280px]">
+                              <div className="flex flex-col items-center justify-center h-full">
+                                <Users className="h-12 w-12 mb-4 text-blue-300" />
+                                <p className="text-lg font-medium text-blue-400">
+                                  {recipientSearchQuery ? "ไม่พบข้อมูลที่ค้นหา" : "ไม่มีข้อมูลผู้รับ"}
+                                </p>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ) : (
-                          recipients.map((recipient) => (
-                            <TableRow key={recipient.id} className="hover:bg-blue-50/50 transition-colors">
-                              <TableCell className="font-medium">
+                          paginatedRecipients.map((recipient) => (
+                            <TableRow
+                                key={recipient.id}
+                                className="
+                                  h-16
+                                  border-b border-blue-100
+                                  transition-all duration-300
+                                  hover:bg-gradient-to-r hover:from-blue-50 hover:to-orange-50
+                                  even:bg-slate-50/50
+                                "
+                              >
+                              <TableCell className="text-gray-500 font-medium">
                                 <div className="flex items-center gap-2">
                                   <Home className="h-4 w-4 text-blue-500" />
                                   {recipient.roomNumber}
                                 </div>
                               </TableCell>
                               <TableCell>
-                                {editingId === recipient.id ? (
-                                  <Input
-                                    value={editForm.fullname}
-                                    onChange={(e) => setEditForm(prev => ({ ...prev, fullname: e.target.value }))}
-                                    className="w-full"
-                                    placeholder="ชื่อผู้รับ"
-                                  />
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <User className="h-4 w-4 text-green-500" />
-                                    {recipient.fullname}
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-2 text-gray-500 font-medium">
+                                  <User className="h-4 w-4 text-green-500" />
+                                  {recipient.fullname}
+                                </div>
                               </TableCell>
                               <TableCell>
-                                {editingId === recipient.id ? (
-                                  <Input
-                                    value={editForm.phone}
-                                    onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
-                                    className="w-full"
-                                    placeholder="เบอร์โทร"
-                                  />
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4 text-orange-500" />
-                                    {recipient.phone}
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-2 text-gray-500 font-medium">
+                                  <Phone className="h-4 w-4 text-orange-500" />
+                                  {recipient.phone}
+                                </div>
                               </TableCell>
-                              <TableCell className="text-blue-400 text-sm">
+                              <TableCell className="text-gray-500 font-medium">
                                 {formatDate(recipient.createdAt)}
                               </TableCell>
                               <TableCell>
-                                {editingId === recipient.id ? (
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={handleSaveEdit}
-                                      disabled={updating}
-                                      className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700"
-                                    >
-                                      {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={handleCancelEdit}
-                                      disabled={updating}
-                                      className="h-8 w-8 p-0"
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleEdit(recipient)}
-                                      className="h-8 w-8 p-0 border-blue-300 text-blue-600 hover:bg-blue-50"
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleDelete(recipient)}
-                                      className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleEdit(recipient)}
+                                    className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/50 hover:bg-blue-100 hover:border-blue-300 transition-all duration-200"
+                                  >
+                                    <Edit className="h-3.5 w-3.5 text-blue-600" />
+                                    <span className="text-xs font-medium text-blue-700">แก้ไข</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(recipient)}
+                                    className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50/50 hover:bg-red-100 hover:border-red-300 transition-all duration-200"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                    <span className="text-xs font-medium text-red-600">ลบ</span>
+                                  </button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))
                         )}
                       </TableBody>
                     </Table>
+                    {/* Pagination Controls */}
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-blue-100 bg-gradient-to-r from-blue-50/50 to-white">
+                      <div className="text-sm text-gray-500 font-medium">
+                        แสดง <span className="text-blue-600">{((recipientPage - 1) * RECIPIENTS_PER_PAGE) + 1}-{Math.min(recipientPage * RECIPIENTS_PER_PAGE, recipients.length)}</span> จาก <span className="text-blue-600">{recipients.length}</span> คน
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={recipientPage === 1}
+                          onClick={() => handleRecipientPageChange(recipientPage - 1)}
+                          className="h-8 px-3 border-blue-200 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-40"
+                        >
+                          <span className="text-xs">‹ ก่อนหน้า</span>
+                        </Button>
+                        
+                        <div className="flex items-center gap-1 mx-1">
+                          {Array.from({ length: totalRecipientPages }, (_, i) => i + 1)
+                            .filter(page => {
+                              if (totalRecipientPages <= 5) return true;
+                              if (page === 1 || page === totalRecipientPages) return true;
+                              if (Math.abs(page - recipientPage) <= 1) return true;
+                              return false;
+                            })
+                            .map((page, idx, arr) => (
+                              <Fragment key={page}>
+                                {idx > 0 && arr[idx - 1] !== page - 1 && (
+                                  <span className="text-gray-400 px-1">...</span>
+                                )}
+                                <Button
+                                  variant={recipientPage === page ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => handleRecipientPageChange(page)}
+                                  className={`h-8 w-8 p-0 text-xs font-medium transition-all ${
+                                    recipientPage === page 
+                                      ? "bg-blue-600 text-white shadow-md hover:bg-blue-700" 
+                                      : "border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                                  }`}
+                                >
+                                  {page}
+                                </Button>
+                              </Fragment>
+                            ))
+                          }
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={recipientPage === totalRecipientPages || totalRecipientPages === 0}
+                          onClick={() => handleRecipientPageChange(recipientPage + 1)}
+                          className="h-8 px-3 border-blue-200 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-40"
+                        >
+                          <span className="text-xs">ถัดไป ›</span>
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -723,35 +1028,212 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-red-700">ยืนยันการลบ</DialogTitle>
-            <DialogDescription>
-              คุณแน่ใจหรือไม่ที่จะลบข้อมูลผู้รับ "{selectedRecipient?.fullname}" ห้อง {selectedRecipient?.roomNumber}?
-              <br />
-              <span className="text-red-500 font-medium">การดำเนินการนี้ไม่สามารถย้อนกลับได้</span>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2 justify-end">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              disabled={deleting}
-            >
-              ยกเลิก
-            </Button>
-            <Button
-              onClick={confirmDelete}
-              disabled={deleting}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              ลบข้อมูล
-            </Button>
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white/95 rounded-2xl shadow-2xl px-8 py-8 max-w-sm w-full mx-4 flex flex-col items-center animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-5">
+              <Trash2 className="w-10 h-10 text-red-500" />
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-900 mb-2 text-center">ยืนยันการลบ</h2>
+            <p className="text-gray-500 text-center mb-1">
+              คุณแน่ใจหรือไม่ที่จะลบข้อมูลผู้รับ
+            </p>
+            <p className="text-gray-700 font-semibold text-center mb-1">
+              "{selectedRecipient?.fullname}" ห้อง {selectedRecipient?.roomNumber}
+            </p>
+            <p className="text-red-400 text-sm text-center mb-6">
+              การดำเนินการนี้ไม่สามารถย้อนกลับได้
+            </p>
+
+            <div className="flex gap-3 w-full">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={deleting}
+                className="flex-1 rounded-xl border-gray-300 hover:bg-gray-50"
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                ลบข้อมูล
+              </Button>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
+
+      {/* Edit Recipient Dialog */}
+      {editDialogOpen && !confirmCloseEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div
+            className="fixed inset-0"
+            onClick={handleTryCloseEdit}
+          />
+          <div className="relative bg-white/95 rounded-2xl shadow-2xl px-8 py-8 max-w-md w-full mx-4 animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 bg-blue-100 rounded-xl">
+                <Edit className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-blue-900">แก้ไขข้อมูลผู้รับ</h2>
+                <p className="text-sm text-gray-500">ห้อง {selectedRecipient?.roomNumber}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <User className="h-4 w-4 text-green-500" />
+                  ชื่อผู้รับ
+                </label>
+                <Input
+                  value={editForm.fullname}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, fullname: e.target.value }))}
+                  placeholder="กรอกชื่อผู้รับ"
+                  className="border-blue-200 focus:border-blue-400 rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Phone className="h-4 w-4 text-orange-500" />
+                  เบอร์โทรศัพท์
+                </label>
+                <Input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="กรอกเบอร์โทรศัพท์"
+                  className="border-blue-200 focus:border-blue-400 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-6">
+              <Button
+                variant="outline"
+                onClick={handleTryCloseEdit}
+                disabled={updating}
+                className="rounded-xl border-gray-300 hover:bg-gray-50"
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                onClick={handleSaveEdit}
+                disabled={updating || !hasEditChanged}
+                className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {updating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                บันทึกการแก้ไข
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Close Edit Dialog */}
+      {confirmCloseEditOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white/95 rounded-2xl shadow-2xl px-8 py-8 max-w-sm w-full mx-4 flex flex-col items-center animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mb-5">
+              <AlertTriangle className="w-10 h-10 text-amber-500" />
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-900 mb-2 text-center">
+              ยกเลิกการแก้ไข?
+            </h2>
+            <p className="text-gray-500 text-center mb-6">
+              คุณต้องการยกเลิกการแก้ไขข้อมูลผู้รับหรือไม่?
+            </p>
+
+            <div className="flex gap-3 w-full">
+              <Button
+                onClick={() => setConfirmCloseEditOpen(false)}
+                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+              >
+                แก้ไขต่อ
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleConfirmCloseEdit}
+                className="flex-1 rounded-xl border-gray-300 hover:bg-gray-50"
+              >
+                ยกเลิก
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Popup */}
+      {successPopup?.show && (
+        <div className={`fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm ${successPopup.type === 'error' ? 'z-[70]' : 'z-50'}`}>
+          <div className="bg-white/95 rounded-2xl shadow-2xl px-10 py-8 max-w-sm w-full mx-4 flex flex-col items-center animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-5 shadow-lg ${
+              successPopup.type === 'delete' ? 'bg-red-500' : successPopup.type === 'error' ? 'bg-amber-500' : 'bg-green-500'
+            }`}>
+              {successPopup.type === 'delete'
+                ? <Trash2 className="w-12 h-12 text-white" strokeWidth={2.5} />
+                : successPopup.type === 'error'
+                ? <AlertTriangle className="w-12 h-12 text-white" strokeWidth={2.5} />
+                : <Check className="w-14 h-14 text-white" strokeWidth={3} />
+              }
+            </div>
+
+            <h2 className={`text-2xl font-extrabold mb-2 ${
+              successPopup.type === 'delete' ? 'text-red-700' : successPopup.type === 'error' ? 'text-amber-700' : 'text-gray-900'
+            }`}>
+              {successPopup.type === 'error' ? 'เกิดข้อผิดพลาด' : successPopup.message}
+            </h2>
+
+            <p className={`text-center ${
+              successPopup.type === 'error' ? 'text-gray-500' : 'text-gray-400'
+            }`}>
+              {successPopup.type === 'delete'
+                ? 'ข้อมูลถูกลบออกจากระบบแล้ว'
+                : successPopup.type === 'error'
+                ? successPopup.message
+                : 'ข้อมูลได้รับการอัปเดตเรียบร้อยแล้ว'
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Processing Popup - Edit */}
+      {updating && !editDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full mx-4 flex flex-col items-center">
+            <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-6" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              กำลังบันทึกการแก้ไข...
+            </h2>
+            <p className="text-gray-500 text-center">
+              กรุณารอสักครู่ ระบบกำลังอัปเดตข้อมูลผู้รับ
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Processing Popup - Delete */}
+      {deleting && !deleteDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full mx-4 flex flex-col items-center">
+            <Loader2 className="w-16 h-16 text-red-500 animate-spin mb-6" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              กำลังลบข้อมูล...
+            </h2>
+            <p className="text-gray-500 text-center">
+              กรุณารอสักครู่ ระบบกำลังลบข้อมูลผู้รับ
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+} 

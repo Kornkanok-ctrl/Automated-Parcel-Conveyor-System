@@ -72,9 +72,9 @@ async function doGetRecipientsForAdmin(req, res) {
 
     if (search) {
       whereClause.OR = [
-        { fullname: { contains: search } },
-        { phone: { contains: search } },
-        { roomNumber: { contains: search } }
+        { fullname: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { roomNumber: { contains: search, mode: 'insensitive' } }
       ];
     }
 

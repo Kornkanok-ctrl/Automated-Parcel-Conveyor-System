@@ -129,6 +129,33 @@ export interface AdminRecipient {
   updatedAt: string;
 }
 
+// Bulk status update
+export interface BulkStatusUpdateRequest {
+  parcelIds: string[];
+  status: string;
+}
+
+export interface BulkStatusUpdateResponse {
+  success: boolean;
+  message: string;
+  updatedCount: number;
+  parcels: Parcel[];
+}
+
+export interface StatusHistoryEntry {
+  id: string;
+  status: string;
+  changedAt: string;
+  changedBy: string;
+  notes?: string;
+}
+
+export interface ParcelStatusHistoryResponse {
+  success: boolean;
+  parcel: Parcel;
+  history: StatusHistoryEntry[];
+}
+
 class ApiService {
   private adminToken: string | null = null;
 
@@ -226,7 +253,7 @@ class ApiService {
   }
 
   // Add this new method
-  async updateParcelStatus(parcelId: number, status: string): Promise<{success: boolean; message: string; parcel: Parcel}> {
+  async updateParcelStatus(parcelId: string, status: string): Promise<{success: boolean; message: string; parcel: Parcel}> {
     return this.fetch<{success: boolean; message: string; parcel: Parcel}>(`/parcels/${parcelId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
@@ -343,6 +370,21 @@ class ApiService {
   async deleteRecipient(recipientId: string): Promise<{success: boolean; message: string}> {
     return this.fetch<{success: boolean; message: string}>(`/admin/recipients/${recipientId}`, {
       method: 'DELETE',
+    });
+  }
+
+  // Bulk status update
+  async bulkUpdateParcelStatus(request: BulkStatusUpdateRequest): Promise<BulkStatusUpdateResponse> {
+    return this.fetch<BulkStatusUpdateResponse>('/admin/parcels/bulk-status', {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // Get parcel status history
+  async getParcelStatusHistory(parcelId: string): Promise<ParcelStatusHistoryResponse> {
+    return this.fetch<ParcelStatusHistoryResponse>(`/admin/parcels/${parcelId}/history`, {
+      method: 'GET',
     });
   }
 }

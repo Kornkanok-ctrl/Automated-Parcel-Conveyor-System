@@ -17,4 +17,6 @@ module.exports = function (app) {
   app.get('/api/parcels', parcelsController.getParcels);
   app.put('/api/parcels/:id/status', parcelsController.updateParcelStatus);
   app.delete('/api/parcels/:id', parcelsController.deleteParcel);
+  app.put('/api/admin/parcels/bulk-status', parcelsController.bulkUpdateParcelStatus);
+  app.get('/api/admin/parcels/:id/history', parcelsController.getParcelStatusHistory);
 };

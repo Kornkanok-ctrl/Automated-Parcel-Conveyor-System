@@ -331,12 +331,17 @@ async function doUpdateParcelStatus(req, res) {
     const { id } = req.params;
     const { status, notes } = req.body;
     
+    console.log(`Updating parcel status - ID: ${id}, Status: ${status}`);
+    
     const transportNumber = await prisma.transportNumber.findUnique({
       where: { id: id }, // Remove parseInt() - keep as string
       include: { transport: true, receiver: true }
     });
     
+    console.log(`Found transportNumber:`, transportNumber ? 'YES' : 'NO');
+    
     if (!transportNumber) {
+      console.log(`TransportNumber with id ${id} not found`);
       return res.status(404).json({
         success: false,
         message: 'Parcel not found'
@@ -446,12 +451,167 @@ async function doDeleteParcel(req, res) {
   }
 }
 
+async function doBulkUpdateParcelStatus(req, res) {
+  try {
+    const { parcelIds, status } = req.body;
+    
+    // Validation
+    if (!parcelIds || !Array.isArray(parcelIds) || parcelIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parcel IDs are required and must be an array'
+      });
+    }
+
+    const validStatuses = ['pending', 'notified', 'collected', 'returned'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Valid statuses are: ' + validStatuses.join(', ')
+      });
+    }
+
+    // Find all transport numbers
+    const transportNumbers = await prisma.transportNumber.findMany({
+      where: {
+        id: {
+          in: parcelIds
+        }
+      },
+      include: {
+        transport: true,
+        receiver: true
+      }
+    });
+
+    if (transportNumbers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No parcels found for the provided IDs'
+      });
+    }
+
+    // Get unique transport IDs
+    const transportIds = transportNumbers.map(tn => tn.id_transport);
+
+    // Update all transport statuses
+    await prisma.transport.updateMany({
+      where: {
+        id: {
+          in: transportIds
+        }
+      },
+      data: {
+        status: status,
+        updatedAt: new Date()
+      }
+    });
+
+    // Get updated data
+    const updatedTransportNumbers = await prisma.transportNumber.findMany({
+      where: {
+        id: {
+          in: parcelIds
+        }
+      },
+      include: {
+        transport: true,
+        receiver: true
+      }
+    });
+
+    // Transform data
+    const updatedParcels = updatedTransportNumbers.map(tn => ({
+      id: tn.id,
+      trackingNumber: tn.trackingNumber,
+      roomNumber: tn.receiver.roomNumber,
+      recipientName: tn.receiver.fullname,
+      phoneNumber: tn.receiver.phone,
+      deliveryCompany: tn.transport.transport_name,
+      status: tn.transport.status,
+      createdAt: tn.createdAt,
+      updatedAt: tn.updatedAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully updated ${updatedParcels.length} parcels to ${status}`,
+      updatedCount: updatedParcels.length,
+      parcels: updatedParcels
+    });
+
+  } catch (error) {
+    console.error("Bulk update parcel status error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+}
+
+// เพิ่มฟังก์ชันสำหรับดึงประวัติสถานะ
+async function doGetParcelStatusHistory(req, res) {
+  try {
+    const { id } = req.params;
+
+    const transportNumber = await prisma.transportNumber.findUnique({
+      where: { id: id },
+      include: {
+        transport: true,
+        receiver: true
+      }
+    });
+
+    if (!transportNumber) {
+      return res.status(404).json({
+        success: false,
+        message: 'Parcel not found'
+      });
+    }
+
+    // สำหรับตอนนี้ใช้ข้อมูลปัจจุบัน เพราะไม่มีตาราง history
+    // ในอนาคตสามารถเพิ่มตาราง StatusHistory ได้
+    const history = [
+      {
+        id: 1,
+        status: transportNumber.transport.status,
+        changedAt: transportNumber.transport.updatedAt,
+        changedBy: 'System', // ในอนาคตสามารถเพิ่ม admin tracking ได้
+        notes: null
+      }
+    ];
+
+    res.status(200).json({
+      success: true,
+      parcel: {
+        id: transportNumber.id,
+        trackingNumber: transportNumber.trackingNumber,
+        roomNumber: transportNumber.receiver.roomNumber,
+        recipientName: transportNumber.receiver.fullname,
+        deliveryCompany: transportNumber.transport.transport_name,
+        currentStatus: transportNumber.transport.status
+      },
+      history: history
+    });
+
+  } catch (error) {
+    console.error("Get parcel status history error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+}
+
+// อัปเดต exports
 const parcelsController = {
   createParcel: doCreateParcel,
   getParcels: doGetParcels,
   getParcelByTracking: doGetParcelByTracking,
   updateParcelStatus: doUpdateParcelStatus,
-  deleteParcel: doDeleteParcel
+  deleteParcel: doDeleteParcel,
+  bulkUpdateParcelStatus: doBulkUpdateParcelStatus,
+  getParcelStatusHistory: doGetParcelStatusHistory
 };
 
 module.exports = parcelsController;

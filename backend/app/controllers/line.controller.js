@@ -74,18 +74,55 @@ async function doHandleWebhook(req, res) {
           await unlockLocker(locker);
 
           await client.replyMessage(event.replyToken, {
-            type: "template",
+            type: "flex",
             altText: "ยืนยันการรับพัสดุ",
-            template: {
-              type: "buttons",
-              text: `ล็อกเกอร์ ${locker} เปิดแล้ว \nกรุณากดยืนยันหลังจากรับพัสดุเรียบร้อยแล้ว\nTracking: ${trackingNumber}`,
-              actions: [
-                {
-                  type: "postback",
-                  label: "ยืนยันรับพัสดุ",
-                  data: `action=confirm_pickup&trackingID=${trackingID}&trackingNumber=${trackingNumber}`,
-                },
-              ],
+            contents: {
+              type: "bubble",
+              body: {
+                type: "box",
+                layout: "vertical",
+                spacing: "md",
+                contents: [
+                  {
+                    type: "text",
+                    text: `ล็อกเกอร์ ${locker} เปิดแล้ว`,
+                    weight: "bold",
+                    size: "lg",
+                  },
+                  {
+                    type: "text",
+                    text: `Tracking: ${trackingNumber}`,
+                    size: "sm",
+                    color: "#666666",
+                  },
+                ],
+              },
+              footer: {
+                type: "box",
+                layout: "vertical",
+                spacing: "sm",
+                contents: [
+                  {
+                    type: "button",
+                    style: "primary",
+                    color: "#27AE60",
+                    action: {
+                      type: "postback",
+                      label: "✅ ยืนยันการรับพัสดุ",
+                      data: `action=confirm_pickup&trackingID=${trackingID}&trackingNumber=${trackingNumber}`,
+                    },
+                  },
+                  {
+                    type: "button",
+                    style: "secondary",
+                    action: {
+                      type: "postback",
+                      label: "❗ แจ้งปัญหา",
+                      data: `action=confirm_error&trackingID=${trackingID}&trackingNumber=${trackingNumber}`,
+                    },
+                  },
+                ],
+              },
             },
           });
           return;
@@ -98,15 +135,48 @@ async function doHandleWebhook(req, res) {
               text: "พัสดุถูกยืนยันไปแล้ว",
             });
           }
+          if (tracking.status === "returned") {
+            return client.replyMessage(event.replyToken, {
+              type: "text",
+              text: "พัสดุถูกยกเลิกไปแล้ว",
+            });
+          }
 
           await prisma.transport.update({
             where: { id: trackingID },
-            data: { status: "picked_up" },
+            data: { status: "collected" },
           });
 
           await client.replyMessage(event.replyToken, {
             type: "text",
             text: `ยืนยันรับพัสดุเรียบร้อย\nTracking: ${trackingNumber}`,
+          });
+
+          return;
+        }
+        // กรณียกเลิกรับพัสดุ
+        if (data.includes("action=confirm_error")) {
+          if (tracking.status !== "notified") {
+            return client.replyMessage(event.replyToken, {
+              type: "text",
+              text: "พัสดุถูกยกเลิกเรียบร้อยแล้ว",
+            });
+          }
+          if (tracking.status === "collected") {
+            return client.replyMessage(event.replyToken, {
+              type: "text",
+              text: "พัสดุถูกรับไปแล้ว",
+            });
+          }
+
+          await prisma.transport.update({
+            where: { id: trackingID },
+            data: { status: "returned" },
+          });
+
+          await client.replyMessage(event.replyToken, {
+            type: "text",
+            text: `ยืนยันยกเลิกพัสดุเรียบร้อย\nTracking: ${trackingNumber} \nโปรดนำพัสดุส่งมอบแก่เจ้าหน้าที่`,
           });
 
           return;

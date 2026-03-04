@@ -375,7 +375,7 @@ class ApiService {
 
   // Bulk status update
   async bulkUpdateParcelStatus(request: BulkStatusUpdateRequest): Promise<BulkStatusUpdateResponse> {
-    return this.fetch<BulkStatusUpdateResponse>('/admin/parcels/bulk-status', {
+    return this.fetch<BulkStatusUpdateResponse>('/admin/parcels-bulk-status', {
       method: 'PUT',
       body: JSON.stringify(request),
     });

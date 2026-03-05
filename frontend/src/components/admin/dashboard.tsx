@@ -88,6 +88,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [selectedParcelForStatus, setSelectedParcelForStatus] = useState<Parcel | null>(null);
   const [updatingParcelStatus, setUpdatingParcelStatus] = useState(false);
+  const [selectedNewStatus, setSelectedNewStatus] = useState<string | null>(null);
+  const [confirmCloseStatusOpen, setConfirmCloseStatusOpen] = useState(false);
 
 
   const companyColors: Record<string, string> = {
@@ -123,10 +125,10 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setSelectedParcels(newSelected);
   };
   const selectAllParcels = () => {
-    if (selectedParcels.size === paginatedParcels.length) {
+    if (selectedParcels.size === tableData.length) {
       setSelectedParcels(new Set());
     } else {
-      setSelectedParcels(new Set(paginatedParcels.map(p => p.id.toString())));
+      setSelectedParcels(new Set(tableData.map(p => p.id.toString())));
     }
   };
 
@@ -164,7 +166,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       }
     } catch (err) {
       console.error("Bulk status update error:", err);
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอัพเดตสถานะ');
+      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
     } finally {
       setBulkUpdating(false);
     }
@@ -178,6 +180,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const response = await apiService.getParcelStatusHistory(parcel.id.toString());
       
       if (response.success) {
+        await new Promise(resolve => setTimeout(resolve, 400)); // เพิ่มดีเลย์ 0.4 วินาที เพื่อให้ dialog เปิดก่อนแสดงข้อมูล
         setSelectedParcelHistory(response);
       }
     } catch (err) {
@@ -191,25 +194,23 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const renderStatusButtons = (parcel: any) => {
     return (
       <div className="flex items-center gap-1.5">
-        <Button
-          size="sm"
+        <button
           onClick={() => openStatusDialog(parcel)}
-          className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/50 hover:bg-blue-100 hover:border-blue-300 transition-all duration-200"
           title="จัดการสถานะ"
         >
-          <Edit className="h-3 w-3 mr-1" />
-          จัดการ
-        </Button>
-        
-        <Button
-          size="sm"
-          variant="outline"
+          <Edit className="h-3.5 w-3.5 text-blue-600" />
+          <span className="text-xs font-medium text-blue-700">จัดการ</span>
+        </button>
+
+        <button
           onClick={() => handleViewHistory(parcel)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50/50 hover:bg-red-100 hover:border-red-300 transition-all duration-200"
           title="ดูประวัติสถานะ"
-          className="h-7 px-2 text-xs border-gray-300 text-gray-600 hover:bg-gray-50"
         >
-          📋
-        </Button>
+          <Clock className="h-3.5 w-3.5 text-red-500" />
+          <span className="text-xs font-medium text-red-600">ประวัติ</span>
+        </button>
       </div>
     );
   };
@@ -240,6 +241,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const response = await apiService.updateParcelStatus(parcelId, newStatus);
       
       if (response.success) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
         setParcels(prevParcels => 
           prevParcels.map(parcel => 
             parcel.id.toString() === parcelId
@@ -247,11 +249,11 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               : parcel
           )
         );
-        setParcelLastUpdated(new Date()); 
+        setParcelLastUpdated(new Date());
         setStatusDialogOpen(false);
         setSelectedParcelForStatus(null);
+        setSelectedNewStatus(null);
         
-        // แสดงข้อความสำเร็จ
         setSuccessPopup({ 
           show: true, 
           message: "อัปเดตสถานะเรียบร้อยแล้ว", 
@@ -260,7 +262,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       }
     } catch (err) {
       console.error("Status update error:", err);
-      setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอัพเดตสถานะ');
+      setUpdatingParcelStatus(false);
+      const errorMsg = parseApiError(err, 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
+      setSuccessPopup({ show: true, message: errorMsg, type: 'error' });
     } finally {
       setUpdatingParcelStatus(false);
     }
@@ -268,6 +272,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const openStatusDialog = (parcel: Parcel) => {
     setSelectedParcelForStatus(parcel);
+    setSelectedNewStatus(null);
     setStatusDialogOpen(true);
   };
 
@@ -383,30 +388,28 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
     try {
       setUpdating(true);
-      setEditDialogOpen(false);
       const response = await apiService.updateRecipient(selectedRecipient.id, editForm);
 
       if (response.success) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setEditDialogOpen(false);
+        setSelectedRecipient(null);
+        setEditForm({ fullname: "", phone: "" });
+        setRecipientLastUpdated(new Date());
+        setUpdating(false);
+        setSuccessPopup({ show: true, message: "แก้ไขข้อมูลสำเร็จแล้ว", type: "edit" });
         setRecipients(prev => 
           prev.map(recipient => 
-            recipient.id === selectedRecipient.id 
+            recipient.id === response.recipient.id 
               ? response.recipient
               : recipient
           )
         );
-        setSelectedRecipient(null);
-        setEditForm({ fullname: "", phone: "" });
-        setRecipientLastUpdated(new Date());
-        setTimeout(() => {
-          setUpdating(false);
-          setSuccessPopup({ show: true, message: "แก้ไขข้อมูลสำเร็จแล้ว", type: "edit" });
-        }, 3000);
       }
     } catch (err) {
       console.error("Update recipient error:", err);
       setUpdating(false);
-      setEditDialogOpen(true);
-      const errorMsg = parseApiError(err, 'เกิดข้อผิดพลาดในการอัพเดต');
+      const errorMsg = parseApiError(err, 'เกิดข้อผิดพลาดในการอัปเดต');
       setSuccessPopup({ show: true, message: errorMsg, type: 'error' });
     }
   };
@@ -421,17 +424,16 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
     try {
       setDeleting(true);
-      setDeleteDialogOpen(false);
       const response = await apiService.deleteRecipient(selectedRecipient.id);
 
       if (response.success) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setDeleteDialogOpen(false);
         setPendingDeleteId(selectedRecipient.id);
         setSelectedRecipient(null);
         setRecipientLastUpdated(new Date());
-        setTimeout(() => {
-          setDeleting(false);
-          setSuccessPopup({ show: true, message: "ลบข้อมูลสำเร็จแล้ว", type: "delete" });
-        }, 3000);
+        setDeleting(false);
+        setSuccessPopup({ show: true, message: "ลบข้อมูลสำเร็จแล้ว", type: "delete" });
       }
     } catch (err) {
       console.error("Delete recipient error:", err);
@@ -620,7 +622,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </header>
 
       {/* Main Content */}
-      <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 overflow-hidden">
+      <div className="relative mx-auto w-full px-6 py-8 overflow-hidden">
         {/* Accent Circles */}
         <div className="absolute top-0 left-0 w-[350px] h-[350px] bg-blue-100/30 rounded-full blur-3xl -z-10 -translate-x-1/3 -translate-y-1/3" />
         <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-orange-100/30 rounded-full blur-3xl -z-10 translate-x-1/4 translate-y-1/4" />
@@ -756,99 +758,72 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <TabsContent value="parcels">
             <Card className="bg-white/90 border-0 shadow-xl">
                   <CardHeader className="pt-6">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-row items-center gap-3 flex-wrap">
+                        {/* LEFT: Title */}
+                        <div>
+                          <CardTitle className="text-blue-900">
+                            รายการพัสดุ ({parcels.length} รายการ)
+                          </CardTitle>
+                        </div>
 
-                      {/* LEFT: Title + Last Updated */}
-                      <div>
-                        <CardTitle className="text-blue-900">
-                          รายการพัสดุ ({parcels.length} รายการ)
-                        </CardTitle>
-
-                        {parcelLastUpdated && (
-                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-3">
-                            <Clock className="h-3 w-3" />
-                            อัปเดตล่าสุด: {formatDate(parcelLastUpdated)}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* RIGHT: Search */}
-                      <div className="relative w-full md:w-64">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
-
-                        <Input
-                          placeholder="ค้นหารายการพัสดุ..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-10 border-blue-200 focus:border-blue-400 bg-white rounded-xl"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Bulk Actions */}
-                    {selectedParcels.size > 0 && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                        <div className="flex items-center justify-between flex-wrap gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-blue-900">
-                              เลือกแล้ว {selectedParcels.size} รายการ
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedParcels(new Set())}
-                              className="h-7 px-2 text-xs border-blue-300 text-blue-600 hover:bg-blue-100"
-                            >
-                              ยกเลิกการเลือก
-                            </Button>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-blue-700">อัปเดตสถานะเป็น:</span>
-                            
-                            <Button
-                              size="sm"
+                        {/* MIDDLE: Bulk Actions (when selected) */}
+                        {selectedParcels.size > 0 && (
+                          <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl px-3 py-2">
+                            <span className="text-sm font-semibold text-blue-700">
+                              เลือก {selectedParcels.size} รายการ
+                            </span>                       
+                            <button
                               onClick={() => handleBulkStatusUpdate('pending')}
                               disabled={bulkUpdating}
-                              className="h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-900 text-xs font-medium shadow-sm border border-orange-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Clock className="h-3 w-3" />}
-                              รอการแจ้งเตือน
-                            </Button>
-                            
-                            {/* <Button
-                              size="sm"
-                              onClick={() => handleBulkStatusUpdate('notified')}
-                              disabled={bulkUpdating}
-                              className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                            >
-                              {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : "📢"}
-                              แจ้งเตือนแล้ว
-                            </Button>
-                             */}
-                            <Button
-                              size="sm"
+                              รอรับพัสดุ
+                            </button>
+
+                            <button
                               onClick={() => handleBulkStatusUpdate('collected')}
                               disabled={bulkUpdating}
-                              className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-100 hover:bg-green-200 text-green-900 text-xs font-medium shadow-sm border border-green-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
                               รับพัสดุแล้ว
-                            </Button>
-                            
-                            <Button
-                              size="sm"
+                            </button>
+
+                            <button
                               onClick={() => handleBulkStatusUpdate('returned')}
                               disabled={bulkUpdating}
-                              className="h-7 px-3 text-xs bg-red-600 hover:bg-red-700 text-white"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-900 text-xs font-medium shadow-sm border border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {bulkUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <AlertTriangle className="h-3 w-3" />}
                               ส่งคืนแล้ว
-                            </Button>
+                            </button>
+
+                            <button
+                              onClick={() => setSelectedParcels(new Set())}
+                              className="flex items-center justify-center text-blue-500 hover:text-blue-700 border border-blue-200 rounded-lg w-8 h-8 hover:bg-blue-200 transition-all"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           </div>
+                        )}
+
+                        <div className="flex-1" />
+
+                        {/* RIGHT: Search */}
+                        <div className="relative w-full md:w-64">
+                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+
+                          <Input
+                            placeholder="ค้นหารายการพัสดุ..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 border-blue-200 focus:border-blue-400 bg-white rounded-xl"
+                          />
                         </div>
                       </div>
-                    )}
+                    </div>
                   </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
@@ -863,23 +838,31 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       h-full
                       flex flex-col
                     ">
-                      <div className="flex-1 overflow-hidden">
+                      <div className="flex-1 overflow-x-auto">
                         <Table className="border-collapse border-blue-200">
                           <TableHeader className="border-b border-blue-200">
-                            <TableRow className="bg-blue-50 border-b border-blue-200">
+                            <TableRow className="bg-blue-200 border-b border-blue-200">
                               <TableHead className="w-12 text-blue-900 font-semibold">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedParcels.size === paginatedParcels.length && paginatedParcels.length > 0}
-                                  onChange={selectAllParcels}
-                                  className="rounded border-blue-300 text-blue-600 focus:ring-blue-500"
-                                />
+                                <div
+                                  onClick={selectAllParcels}
+                                  className={`w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center cursor-pointer transition-all duration-150 ${
+                                    selectedParcels.size === tableData.length && tableData.length > 0
+                                      ? 'bg-blue-600 border-blue-600 shadow-md shadow-blue-200'
+                                      : selectedParcels.size > 0
+                                      ? 'bg-blue-400 border-blue-400 shadow-sm'
+                                      : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50'
+                                  }`}
+                                >
+                                  {selectedParcels.size > 0 && (
+                                    <Check className="h-2.5 w-2.5 text-white" strokeWidth={3.5} />
+                                  )}
+                                </div>
                               </TableHead>
                               <TableHead className="text-blue-900 font-semibold">เลขพัสดุ</TableHead>
                               <TableHead className="text-blue-900 font-semibold">ห้อง</TableHead>
                               <TableHead className="text-blue-900 font-semibold">ชื่อผู้รับ</TableHead>
                               <TableHead className="text-blue-900 font-semibold">บริษัทขนส่ง</TableHead>
-                              <TableHead className="text-blue-900 font-semibold">วันที่-เวลา</TableHead>
+                              <TableHead className="text-blue-900 font-semibold">วันที่สร้าง</TableHead>
                               <TableHead className="text-blue-900 font-semibold">สถานะ</TableHead>
                               <TableHead className="text-blue-900 font-semibold">จัดการ</TableHead>
                             </TableRow>
@@ -900,22 +883,26 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                               paginatedParcels.map((parcel) => (
                                 <TableRow
                                   key={parcel.id}
-                                  className="
-                                    h-14
-                                    border-b border-blue-100
-                                    transition-all duration-300
-                                    hover:bg-gradient-to-r hover:from-blue-50 hover:to-orange-50
-                                    even:bg-slate-50/50
-                                  "
+                                  className={`h-14 border-b border-blue-100 transition-all duration-200 ${
+                                    selectedParcels.has(parcel.id.toString())
+                                      ? 'bg-blue-100 border-blue-200'
+                                      : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-orange-50 even:bg-slate-50/50'
+                                  }`}
                                 >
                                   {/* Checkbox */}
                                   <TableCell>
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedParcels.has(parcel.id.toString())}
-                                      onChange={() => toggleParcelSelection(parcel.id.toString())}
-                                      className="rounded border-blue-300 text-blue-600 focus:ring-blue-500"
-                                    />
+                                    <div
+                                      onClick={() => toggleParcelSelection(parcel.id.toString())}
+                                      className={`w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center cursor-pointer transition-all duration-150 ${
+                                        selectedParcels.has(parcel.id.toString())
+                                          ? 'bg-blue-600 border-blue-600 shadow-md shadow-blue-200 scale-105'
+                                          : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50'
+                                      }`}
+                                    >
+                                      {selectedParcels.has(parcel.id.toString()) && (
+                                        <Check className="h-2.5 w-2.5 text-white" strokeWidth={3.5} />
+                                      )}
+                                    </div>
                                   </TableCell>
 
                                   {/* Tracking */}
@@ -931,7 +918,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   </TableCell>
 
                                   {/* Recipient */}
-                                  <TableCell className="text-gray-500 font-medium">
+                                  <TableCell className="text-gray-500 font-medium whitespace-nowrap">
                                     {parcel.recipientName}
                                   </TableCell>
 
@@ -939,7 +926,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   <TableCell>
                                     <span
                                       className={`
-                                        px-3 py-1 rounded-lg text-sm
+                                        inline-block px-2.5 py-0.5 rounded-lg text-xs whitespace-nowrap
                                         font-medium
                                         ${companyColors[parcel.deliveryCompany] || companyColors["อื่นๆ"]}
                                       `}
@@ -949,7 +936,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   </TableCell>
 
                                   {/* Date */}
-                                  <TableCell className="text-gray-500 font-medium">
+                                  <TableCell className="text-gray-500 font-medium whitespace-nowrap text-xs">
                                     {formatDate(parcel.timestamp)}
                                   </TableCell>
 
@@ -957,8 +944,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   <TableCell>
                                     <span
                                       className={`
-                                        inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border
-                                        transition-all duration-300 hover:scale-105
+                                        inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap
                                         ${statusMap[parcel.displayStatus]?.color}
                                       `}
                                     >
@@ -1062,18 +1048,11 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <CardHeader className="pt-6">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-                      {/* LEFT: Title + Last Updated */}
+                      {/* LEFT: Title */}
                       <div>
                         <CardTitle className="text-blue-900">
                           จัดการผู้รับ ({recipients.length} คน)
                         </CardTitle>
-
-                        {recipientLastUpdated && (
-                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-3">
-                            <Clock className="h-3 w-3" />
-                            อัปเดตล่าสุด: {formatDate(recipientLastUpdated)}
-                          </div>
-                        )}
                       </div>
 
                       {/* RIGHT: Search */}
@@ -1101,7 +1080,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   <div className="flex-1 overflow-hidden"> 
                     <Table className="border-collapse border-blue-200">
                       <TableHeader className="border-b border-blue-200">
-                        <TableRow className="bg-blue-50 border-b border-blue-200">
+                        <TableRow className="bg-blue-200 border-b border-blue-200">
                           <TableHead className="text-blue-900 font-semibold">ห้อง</TableHead>
                           <TableHead className="text-blue-900 font-semibold">ชื่อผู้รับ</TableHead>
                           <TableHead className="text-blue-900 font-semibold">เบอร์โทรศัพท์</TableHead>
@@ -1276,8 +1255,17 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 disabled={deleting}
                 className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md"
               >
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                ลบข้อมูล
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    กำลังลบ...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    ลบข้อมูล
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -1344,8 +1332,17 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 disabled={updating || !hasEditChanged}
                 className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {updating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                บันทึกการแก้ไข
+                {updating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    กำลังบันทึก...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    บันทึกการแก้ไข
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -1401,7 +1398,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               }
             </div>
 
-            <h2 className={`text-2xl font-extrabold mb-2 ${
+            <h2 className={`text-2xl font-extrabold mb-2 text-center ${
               successPopup.type === 'delete' ? 'text-red-700' : successPopup.type === 'error' ? 'text-amber-700' : 'text-gray-900'
             }`}>
               {successPopup.type === 'error' ? 'เกิดข้อผิดพลาด' : successPopup.message}
@@ -1421,108 +1418,186 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
       )}
 
-      {/* Processing Popup - Edit */}
-      {updating && !editDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full mx-4 flex flex-col items-center">
-            <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-6" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              กำลังบันทึกการแก้ไข...
-            </h2>
-            <p className="text-gray-500 text-center">
-              กรุณารอสักครู่ ระบบกำลังอัปเดตข้อมูลผู้รับ
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Processing Popup - Delete */}
-      {deleting && !deleteDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full mx-4 flex flex-col items-center">
-            <Loader2 className="w-16 h-16 text-red-500 animate-spin mb-6" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              กำลังลบข้อมูล...
-            </h2>
-            <p className="text-gray-500 text-center">
-              กรุณารอสักครู่ ระบบกำลังลบข้อมูลผู้รับ
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Status Management Dialog */}
-      {statusDialogOpen && selectedParcelForStatus && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white/95 rounded-2xl shadow-2xl px-8 py-8 max-w-md w-full mx-4 animate-in fade-in-0 zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 bg-blue-100 rounded-xl">
-                <Edit className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-blue-900">จัดการสถานะพัสดุ</h2>
-                <p className="text-sm text-gray-500">
-                  {selectedParcelForStatus.trackingNumber} - {selectedParcelForStatus.recipientName}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-gray-700 mb-4">
-                สถานะปัจจุบัน: <span className={`px-2 py-1 rounded-md text-xs font-medium ${
-                  selectedParcelForStatus.status === 'pending' 
-                    ? 'bg-orange-100 text-orange-700' 
-                    : selectedParcelForStatus.status === 'collected' 
-                    ? 'bg-green-100 text-green-700' 
-                    : selectedParcelForStatus.status === 'returned'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {selectedParcelForStatus.status === 'pending' && 'รอการแจ้งเตือน'}
-                  {selectedParcelForStatus.status === 'collected' && 'รับพัสดุแล้ว'}
-                  {selectedParcelForStatus.status === 'returned' && 'ส่งคืนแล้ว'}
-                </span>
-              </p>
-
-              <div className="grid grid-cols-1 gap-3">
-                <Button
-                  onClick={() => handleStatusUpdate(selectedParcelForStatus.id.toString(), 'pending')}
-                  disabled={updatingParcelStatus || selectedParcelForStatus.status === 'pending'}
-                  className="bg-orange-600 hover:bg-orange-700 text-white disabled:opacity-40 justify-start"
-                >
-                  {updatingParcelStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}
-                  รอการแจ้งเตือน
-                </Button>
-
-                <Button
-                  onClick={() => handleStatusUpdate(selectedParcelForStatus.id.toString(), 'collected')}
-                  disabled={updatingParcelStatus || selectedParcelForStatus.status === 'collected'}
-                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 justify-start"
-                >
-                  {updatingParcelStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                  รับพัสดุแล้ว
-                </Button>
-
-                <Button
-                  onClick={() => handleStatusUpdate(selectedParcelForStatus.id.toString(), 'returned')}
-                  disabled={updatingParcelStatus || selectedParcelForStatus.status === 'returned'}
-                  className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 justify-start"
-                >
-                  {updatingParcelStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <AlertTriangle className="h-4 w-4 mr-2" />}
-                  ส่งคืนแล้ว
-                </Button>
+      {statusDialogOpen && selectedParcelForStatus && !confirmCloseStatusOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={(e) => {
+            if (!updatingParcelStatus && e.target === e.currentTarget) {
+              if (selectedNewStatus) {
+                setConfirmCloseStatusOpen(true);
+              } else {
+                setStatusDialogOpen(false);
+                setSelectedParcelForStatus(null);
+                setSelectedNewStatus(null);
+              }
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-100 rounded-xl">
+                  <Edit className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-bold text-gray-900">จัดการสถานะพัสดุ</h2>
+                  <p className="text-sm text-gray-500 truncate">
+                    {selectedParcelForStatus.trackingNumber} · {selectedParcelForStatus.recipientName}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end pt-6">
+            {/* Current status */}
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
+              <p className="text-sm text-gray-500 mb-1.5">สถานะปัจจุบัน</p>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                (selectedParcelForStatus.status === 'pending' || selectedParcelForStatus.status === 'notified')
+                  ? 'bg-orange-100 text-orange-700'
+                  : selectedParcelForStatus.status === 'collected'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {(selectedParcelForStatus.status === 'pending' || selectedParcelForStatus.status === 'notified') && <><Clock className="h-3.5 w-3.5" /> รอรับพัสดุ</>}
+                {selectedParcelForStatus.status === 'collected' && <><CheckCircle className="h-3.5 w-3.5" /> รับพัสดุแล้ว</>}
+                {selectedParcelForStatus.status === 'returned' && <><AlertTriangle className="h-3.5 w-3.5" /> ส่งคืนแล้ว</>}
+              </span>
+            </div>
+
+            {/* Status selection */}
+            <div className="px-6 py-4">
+              <p className="text-sm text-gray-500 tracking-wide mb-3">เลือกสถานะใหม่</p>
+              <div className="space-y-2">
+                {[
+                  {
+                    value: 'pending',
+                    label: 'รอรับพัสดุ',
+                    icon: <Clock className="h-4 w-4" />,
+                    base: 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100',
+                    active: 'border-orange-400 bg-orange-100 text-orange-700',
+                    checkActive: 'border-orange-400 bg-orange-400',
+                  },
+                  {
+                    value: 'collected',
+                    label: 'รับพัสดุแล้ว',
+                    icon: <CheckCircle className="h-4 w-4" />,
+                    base: 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100',
+                    active: 'border-green-500 bg-green-200 text-green-800',
+                    checkActive: 'border-green-500 bg-green-500',
+                  },
+                  {
+                    value: 'returned',
+                    label: 'ส่งคืนแล้ว',
+                    icon: <AlertTriangle className="h-4 w-4" />,
+                    base: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100',
+                    active: 'border-red-500 bg-red-200 text-red-800',
+                    checkActive: 'border-red-500 bg-red-500',
+                  },
+                ].map((option) => {
+                  const isSelected = selectedNewStatus === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        if (updatingParcelStatus) return;
+                        setSelectedNewStatus(isSelected ? null : option.value);
+                      }}
+                      disabled={updatingParcelStatus}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-200 font-medium text-sm ${
+                        isSelected ? option.active : option.base
+                      } ${updatingParcelStatus ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      {option.icon}
+                      <span className="flex-1 text-left">{option.label}</span>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                        isSelected ? option.checkActive : 'border-gray-300 bg-white'
+                      }`}>
+                        {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 pb-6 flex gap-3">
               <Button
                 variant="outline"
                 onClick={() => {
-                  setStatusDialogOpen(false);
-                  setSelectedParcelForStatus(null);
+                  if (selectedNewStatus) {
+                    setConfirmCloseStatusOpen(true);
+                  } else {
+                    setStatusDialogOpen(false);
+                    setSelectedParcelForStatus(null);
+                    setSelectedNewStatus(null);
+                  }
                 }}
                 disabled={updatingParcelStatus}
-                className="rounded-xl border-gray-300 hover:bg-gray-50"
+                className="flex-1 rounded-xl border-gray-200 hover:bg-gray-50 text-gray-600"
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedNewStatus) handleStatusUpdate(selectedParcelForStatus.id.toString(), selectedNewStatus);
+                }}
+                disabled={
+                  updatingParcelStatus ||
+                  !selectedNewStatus
+                }
+                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {updatingParcelStatus ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    กำลังอัปเดต...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" /> 
+                    อัปเดตสถานะ
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Close Status Dialog */}
+      {confirmCloseStatusOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white/95 rounded-2xl shadow-2xl px-8 py-8 max-w-sm w-full mx-4 flex flex-col items-center animate-in fade-in-0 zoom-in-95 duration-200">
+            <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mb-5">
+              <AlertTriangle className="w-10 h-10 text-amber-500" />
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-900 mb-2 text-center">
+              ยกเลิกการแก้ไข?
+            </h2>
+            <p className="text-gray-500 text-center mb-6">
+              คุณต้องการยกเลิกการอัปเดตสถานะหรือไม่?
+            </p>
+
+            <div className="flex gap-3 w-full">
+              <Button
+                onClick={() => setConfirmCloseStatusOpen(false)}
+                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+              >
+                แก้ไขต่อ
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConfirmCloseStatusOpen(false);
+                  setStatusDialogOpen(false);
+                  setSelectedParcelForStatus(null);
+                  setSelectedNewStatus(null);
+                }}
+                className="flex-1 rounded-xl border-gray-300 hover:bg-gray-50"
               >
                 ยกเลิก
               </Button>
@@ -1533,108 +1608,109 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
       {/* Parcel Status History Dialog */}
       {historyDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white/95 rounded-2xl shadow-2xl px-8 py-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setHistoryDialogOpen(false);
+              setSelectedParcelHistory(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-blue-100 rounded-xl">
                   <Package className="h-5 w-5 text-blue-600" />
                 </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-blue-900">ประวัติสถานะพัสดุ</h2>
-                  {selectedParcelHistory && (
-                    <p className="text-sm text-gray-500">
-                      {selectedParcelHistory.parcel.trackingNumber} - {selectedParcelHistory.parcel.recipientName}
-                    </p>
-                  )}
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-bold text-gray-900">ประวัติสถานะพัสดุ</h2>
                 </div>
               </div>
-              
+            </div>
+
+            {/* Parcel Info - tracking left, name right */}
+            {selectedParcelHistory && (
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-700 bg-gray-200 px-2.5 py-1 rounded-lg truncate">
+                  {selectedParcelHistory.parcel.trackingNumber}
+                </span>
+                <span className="flex items-center gap-1.5 text-sm font-medium text-gray-600 truncate">
+                  <User className="h-3.5 w-3.5 text-gray-400" />
+                  {selectedParcelHistory.parcel.recipientName}
+                </span>
+              </div>
+            )}
+
+            {/* History entries */}
+            <div className="overflow-y-auto max-h-[55vh] px-6 py-4 min-h-[120px]">
+              {loadingHistory ? (
+                <div className="flex flex-col items-center justify-center py-10">
+                  <Loader2 className="h-8 w-8 text-blue-500 animate-spin mb-3" />
+                  <p className="text-sm text-gray-400">กำลังโหลดข้อมูล...</p>
+                </div>
+              ) : selectedParcelHistory?.history?.length ? (
+                <>
+                  <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สถานะปัจจุบัน</p>
+                  <div className="space-y-2">
+                    {selectedParcelHistory.history.map((entry, index) => {
+                      const isWaiting = entry.status === 'pending' || entry.status === 'notified';
+                      const isCollected = entry.status === 'collected';
+
+                      const statusBadge = isWaiting
+                        ? { label: 'รอรับพัสดุ', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', icon: <Clock className="h-3.5 w-3.5" /> }
+                        : isCollected
+                        ? { label: 'รับพัสดุแล้ว', badgeClass: 'bg-green-100 text-green-800 border-green-200', icon: <CheckCircle className="h-3.5 w-3.5" /> }
+                        : { label: 'ส่งคืนแล้ว', badgeClass: 'bg-red-100 text-red-700 border-red-200', icon: <AlertTriangle className="h-3.5 w-3.5" /> };
+
+                      return (
+                        <div
+                          key={entry.id}
+                          className="w-full rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${statusBadge.badgeClass}`}>
+                              {statusBadge.icon}
+                              {statusBadge.label}
+                            </span>
+                            {index === 0 && (
+                              <span className="text-sm font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">ล่าสุด</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-sm text-gray-400 mt-1">
+                            <span>อัปเดตล่าสุด: {formatDate(entry.changedAt)}</span>
+                          </div>
+                          {entry.notes && (
+                            <p className="text-sm text-gray-500 mt-1.5 italic">&quot;{entry.notes}&quot;</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10">
+                  <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                    <Package className="h-7 w-7 text-gray-300" />
+                  </div>
+                  <p className="text-gray-400 text-sm">ไม่มีประวัติสถานะ</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6">
               <Button
-                variant="outline"
-                size="sm"
                 onClick={() => {
                   setHistoryDialogOpen(false);
                   setSelectedParcelHistory(null);
                 }}
-                className="rounded-xl border-gray-300 hover:bg-gray-50"
+                className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md"
               >
-                <X className="h-4 w-4" />
+                ปิด
               </Button>
             </div>
-
-            <div className="overflow-y-auto max-h-[50vh]">
-              {loadingHistory ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-                  <span className="ml-3 text-gray-600">กำลังโหลดประวัติ...</span>
-                </div>
-              ) : selectedParcelHistory?.history?.length ? (
-                <div className="space-y-4">
-                  {selectedParcelHistory.history.map((entry, index) => (
-                    <div key={entry.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div className={`p-2 rounded-full text-white text-xs font-bold ${
-                        index === 0 ? 'bg-blue-600' : 'bg-gray-400'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-2 py-1 rounded-md text-xs font-medium ${
-                            entry.status === 'pending'
-                              ? 'bg-orange-100 text-orange-700'
-                              : entry.status === 'collected' 
-                              ? 'bg-green-100 text-green-700'
-                              : entry.status === 'returned'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {entry.status === 'pending' && 'รอการแจ้งเตือน'}
-                            {entry.status === 'collected' && 'รับพัสดุแล้ว'}
-                            {entry.status === 'returned' && 'ส่งคืนแล้ว'}
-                          </span>
-                          
-                          <span className="text-xs text-gray-500">
-                            โดย {entry.changedBy}
-                          </span>
-                        </div>
-                        
-                        <p className="text-sm text-gray-600 mb-1">
-                          {formatDate(entry.changedAt)}
-                        </p>
-                        
-                        {entry.notes && (
-                          <p className="text-sm text-gray-500 italic">
-                            "{entry.notes}"
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p className="text-gray-500">ไม่มีประวัติสถานะ</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Processing Popup - Status Update */}
-      {updatingParcelStatus && !statusDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full mx-4 flex flex-col items-center">
-            <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-6" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              กำลังอัปเดตสถานะพัสดุ...
-            </h2>
-            <p className="text-gray-500 text-center">
-              กรุณารอสักครู่ ระบบกำลังปรัปปรุงสถานะ
-            </p>
           </div>
         </div>
       )}

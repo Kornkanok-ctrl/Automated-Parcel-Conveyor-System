@@ -272,7 +272,6 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
     setSubmitError(null);
     setIsSubmitting(true);
-    setShowProcessingPopup(true);
 
     try {
       const parcelData = {
@@ -283,20 +282,15 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
       const response = await apiService.createParcel(parcelData);
 
       if (response.success) {
-        setTimeout(() => {
-          setShowProcessingPopup(false);
-          setCreatedParcel(response.parcel);
-          setIsComplete(true);
-          setIsSubmitting(false);
-        }, 3000);
+        setCreatedParcel(response.parcel);
+        setIsComplete(true);
+        setIsSubmitting(false);
       } else {
-        setShowProcessingPopup(false);
         setSubmitError(response.message || 'เกิดข้อผิดพลาดในการส่งพัสดุ');
         setIsSubmitting(false);
       }
 
     } catch (error) {
-      setShowProcessingPopup(false);
       setSubmitError(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการส่งพัสดุ');
       setIsSubmitting(false);
     }
@@ -804,21 +798,6 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
             <p className="text-gray-600">
               กรุณารออีก {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:
               {String(remainingSeconds % 60).padStart(2, '0')} ก่อนลองใหม่อีกครั้ง
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Processing Popup */}
-      {showProcessingPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full flex flex-col items-center">
-            <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-6" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              กำลังดำเนินการส่งพัสดุ...
-            </h2>
-            <p className="text-gray-500 text-center">
-              กรุณารอสักครู่ ระบบกำลังบันทึกข้อมูล
             </p>
           </div>
         </div>

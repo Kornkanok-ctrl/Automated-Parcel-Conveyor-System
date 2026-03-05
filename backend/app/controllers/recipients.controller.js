@@ -210,7 +210,7 @@ async function doUpdateRecipient(req, res) {
 
     res.status(200).json({
       success: true,
-      message: 'อัพเดตข้อมูลผู้รับสำเร็จ',
+      message: 'อัปเดตข้อมูลผู้รับสำเร็จ',
       recipient: {
         id: updatedRecipient.id,
         fullname: updatedRecipient.fullname,

@@ -15,7 +15,7 @@ async function doAdminLogin(req, res) {
   try {
     const { username, password } = req.body;
     
-    console.log('Admin login attempt:', { username, hasPassword: !!password });
+    // console.log('Admin login attempt:', { username, hasPassword: !!password });
     
     // Validation
     if (!username || !password) {
@@ -27,7 +27,7 @@ async function doAdminLogin(req, res) {
     
     // Check credentials
     if (username !== ADMIN_CREDENTIALS.username || password !== ADMIN_CREDENTIALS.password) {
-      console.log('Invalid credentials for user:', username);
+      // console.log('Invalid credentials for user:', username);
       return res.status(401).json({
         success: false,
         message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'
@@ -38,7 +38,7 @@ async function doAdminLogin(req, res) {
     const sessionToken = generateSessionToken();
     adminSessions.add(sessionToken);
     
-    console.log('Admin login successful. Active sessions:', adminSessions.size);
+    // console.log('Admin login successful. Active sessions:', adminSessions.size);
     
     res.status(200).json({
       success: true,
@@ -63,11 +63,11 @@ async function doAdminLogout(req, res) {
   try {
     const { sessionToken } = req.body;
     
-    console.log('Admin logout attempt with token:', sessionToken ? 'present' : 'missing');
+    // console.log('Admin logout attempt with token:', sessionToken ? 'present' : 'missing');
     
     if (sessionToken && adminSessions.has(sessionToken)) {
       adminSessions.delete(sessionToken);
-      console.log('Session token removed. Active sessions:', adminSessions.size);
+      // console.log('Session token removed. Active sessions:', adminSessions.size);
     }
     
     res.status(200).json({
@@ -113,7 +113,7 @@ async function doGetAdminStats(req, res) {
       }
     };
     
-    console.log('Admin stats requested. Stats:', stats);
+    // console.log('Admin stats requested. Stats:', stats);
     
     res.status(200).json({
       success: true,
@@ -134,11 +134,10 @@ async function doGetAdminStats(req, res) {
 const checkAdminAuth = (req, res, next) => {
   const sessionToken = req.headers['x-admin-token'] || req.body.sessionToken;
   
-  console.log('Admin auth check. Token:', sessionToken ? 'present' : 'missing');
-  console.log('Active sessions count:', adminSessions.size);
+  // console.log('Admin auth check. Token:', sessionToken ? 'present' : 'missing');
+  // console.log('Active sessions count:', adminSessions.size);
   
   if (!sessionToken) {
-    console.log('No session token provided');
     return res.status(401).json({
       success: false,
       message: 'กรุณาเข้าสู่ระบบก่อน - No token provided'
@@ -146,14 +145,11 @@ const checkAdminAuth = (req, res, next) => {
   }
   
   if (!adminSessions.has(sessionToken)) {
-    console.log('Invalid or expired session token');
     return res.status(401).json({
       success: false,
       message: 'กรุณาเข้าสู่ระบบก่อน - Invalid session'
     });
   }
-  
-  console.log('Admin authentication successful');
   next();
 };
 

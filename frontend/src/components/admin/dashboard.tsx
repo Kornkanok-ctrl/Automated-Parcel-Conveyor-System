@@ -306,7 +306,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       setError(null);
 
       if (!apiService.isAdminLoggedIn()) {
-        console.log("Admin not logged in, redirecting...");
+        // console.log("Admin not logged in, redirecting...");
         onLogout();
         navigate("/login");
         return;
@@ -319,7 +319,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       console.error("Load data error:", err);
       
       if (err instanceof Error && err.message.includes('401')) {
-        console.log("Unauthorized access, redirecting to login...");
+        // console.log("Unauthorized access, redirecting to login...");
         onLogout();
         navigate("/login");
         return;
@@ -444,10 +444,10 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
 
   useEffect(() => {
-    console.log('Dashboard mounted, checking authentication...');
+    // console.log('Dashboard mounted, checking authentication...');
     
     if (!apiService.isAdminLoggedIn()) {
-      console.log('Not authenticated, redirecting to login...');
+      // console.log('Not authenticated, redirecting to login...');
       onLogout();
       navigate("/login");
       return;

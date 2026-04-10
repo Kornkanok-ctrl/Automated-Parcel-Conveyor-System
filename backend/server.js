@@ -8,7 +8,7 @@ const lineRoutes = require('./app/routes/line.routes');
 
 // Enhanced CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173', 'http://10.243.132.181'],
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173', 'http://10.104.198.181'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token', 'x-admin-token'],
   credentials: true
@@ -24,15 +24,15 @@ app.use(express.urlencoded({ extended: true }));
 
 // Add logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  // console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   
   // Log headers for admin routes
-  if (req.path.includes('/admin')) {
-    console.log('Admin request headers:', {
-      'x-admin-token': req.headers['x-admin-token'] ? 'present' : 'missing',
-      'content-type': req.headers['content-type']
-    });
-  }
+  // if (req.path.includes('/admin')) {
+  //   console.log('Admin request headers:', {
+  //     'x-admin-token': req.headers['x-admin-token'] ? 'present' : 'missing',
+  //     'content-type': req.headers['content-type']
+  //   });
+  // }
   
   next();
 });

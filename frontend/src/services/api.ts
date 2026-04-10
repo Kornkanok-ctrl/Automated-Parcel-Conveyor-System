@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://baskets-excuse-del-delight.trycloudflare.com/api';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -299,11 +299,11 @@ class ApiService {
 
   // Token management methods
   private setAdminToken(token: string) {
-    console.log('Setting admin token:', token.substring(0, 10) + '...');
+    // console.log('Setting admin token:', token.substring(0, 10) + '...');
     this.adminToken = token;
     try {
       localStorage.setItem('adminToken', token);
-      console.log('Admin token stored in localStorage successfully');
+      // console.log('Admin token stored in localStorage successfully');
     } catch (error) {
       console.error('Failed to store admin token:', error);
     }
@@ -313,7 +313,7 @@ class ApiService {
     this.adminToken = null;
     try {
       localStorage.removeItem('adminToken');
-      console.log('Admin token cleared');
+      // console.log('Admin token cleared');
     } catch (error) {
       console.error('Failed to clear admin token:', error);
     }
@@ -323,10 +323,10 @@ class ApiService {
   initializeAdminToken() {
     try {
       const savedToken = localStorage.getItem('adminToken');
-      console.log('Initializing admin token from localStorage:', savedToken ? 'found' : 'not found');
+      // console.log('Initializing admin token from localStorage:', savedToken ? 'found' : 'not found');
       if (savedToken) {
         this.adminToken = savedToken;
-        console.log('Admin token initialized from localStorage');
+        // console.log('Admin token initialized from localStorage');
       }
     } catch (error) {
       console.error('Failed to initialize admin token:', error);
@@ -336,7 +336,7 @@ class ApiService {
   // Check if admin is logged in
   isAdminLoggedIn(): boolean {
     const isLoggedIn = !!this.adminToken;
-    console.log('Checking admin login status:', isLoggedIn, 'Token exists:', !!this.adminToken);
+    // console.log('Checking admin login status:', isLoggedIn, 'Token exists:', !!this.adminToken);
     return isLoggedIn;
   }
 

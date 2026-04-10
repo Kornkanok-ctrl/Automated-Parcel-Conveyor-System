@@ -1,34 +1,34 @@
 const { PrismaClient } = require("@prisma/client");
+const { spawn } = require("child_process");
+const hardware = require("../services/hardwareService");
 const prisma = new PrismaClient();
 
 // Mock notification service
-const lineController = require('../controllers/line.controller');
+const lineController = require("../controllers/line.controller");
 
 const sendLineNotification = async (parcel) => {
   try {
-
     if (!parcel.lineUserId) {
       console.log("No LINE userId found");
       return false;
     }
 
     await lineController.pushMessage(parcel.lineUserId, {
-      type: 'template',
-      altText: 'มีพัสดุมาถึงแล้ว',
+      type: "template",
+      altText: "มีพัสดุมาถึงแล้ว",
       template: {
-        type: 'buttons',
+        type: "buttons",
         text: `พัสดุของคุณมาถึงแล้ว\nTracking: ${parcel.trackingNumber}\nล็อกเกอร์: ${parcel.roomNumber}`,
         actions: [
           {
-            type: 'postback',
-            label: 'ปลดล็อค',
-            data: `action=unlock&locker=${parcel.roomNumber}&trackingID=${parcel.id}&trackingNumber=${parcel.trackingNumber}`
-          }
-        ]
-      }
+            type: "postback",
+            label: "ปลดล็อค",
+            data: `action=unlock&locker=${parcel.roomNumber}&trackingID=${parcel.id}&trackingNumber=${parcel.trackingNumber}`,
+          },
+        ],
+      },
     });
     return true;
-
   } catch (error) {
     console.error("LINE send error:", error);
     return false;
@@ -41,204 +41,249 @@ const generateTrackingNumber = () => {
   return `PKG${timestamp}${random}`;
 };
 
+async function runHardwareSequence(parcel) {
+  console.log(`[System] เริ่มรอพัสดุ Tracking: ${parcel.trackingNumber}`);
+
+  // เรียก Python ที่เช็ค Ultrasonic อย่างเดียว
+  const pySensor = spawn("python3", ["check_sensor.py"]);
+
+  pySensor.stdout.on("data", async (data) => {
+    const msg = data.toString().trim();
+
+    if (msg === "DETECTED") {
+      console.log("Found it! Sending LINE and Moving...");
+
+      try {
+        await sendLineNotification(parcel);
+
+        await prisma.transport.update({
+          where: { id: parcel.id },
+          data: { status: "notified" },
+        });
+
+        // 3. สั่ง Python ตัวหลัก (ที่มี Stepper/Servo) ให้ทำงาน
+        // สมมติว่าคุณมีตัวแปร 'pyMain' ที่ spawn ทิ้งไว้อยู่แล้ว
+        pyMain.stdin.write(parcel.roomNumber + "\n");
+      } catch (err) {
+        console.error("Sequence Error:", err);
+      }
+    }
+  });
+
+  pySensor.on("close", () => {
+    console.log("Sensor check process finished.");
+  });
+}
+
 async function doCreateParcel(req, res) {
   try {
-    const { 
-      roomNumber, 
-      deliveryCompany, 
-    } = req.body;
-    
+    const { roomNumber, deliveryCompany } = req.body;
+
     // Validation
     if (!roomNumber || !deliveryCompany) {
       return res.status(400).json({
         success: false,
-        message: 'Room number and delivery company are required'
+        message: "Room number and delivery company are required",
       });
     }
 
     // Find receiver by room number
     const receiverData = await prisma.receiver.findFirst({
       where: {
-        roomNumber: roomNumber
-      }
+        roomNumber: roomNumber,
+      },
     });
 
     if (!receiverData) {
       return res.status(404).json({
         success: false,
-        message: `Receiver not found for room number ${roomNumber}`
+        message: `Receiver not found for room number ${roomNumber}`,
       });
     }
 
-    // Generate tracking number
-    const trackingNumber = generateTrackingNumber();
-
-    // Create transport record
-    const transportData = await prisma.transport.create({
-      data: {
-        transport_name: deliveryCompany,
-        status: 'pending',
-      }
-    });
-
-    // Create transport number record
-    const transportNumberData = await prisma.transportNumber.create({
-      data: {
-        id_transport: transportData.id,
-        id_receiver: receiverData.id,
-        trackingNumber: trackingNumber,
-      },
-      include: {
-        transport: true,
-        receiver: true
-      }
-    });
-
-    // Send LINE notification (simulate)
-    const newParcel = {
-      id: transportNumberData.transport.id,
-      trackingNumber,
-      roomNumber,
-      phoneNumber: receiverData.phone,
-      recipientName: receiverData.fullname,
-      deliveryCompany,
-      status: 'pending',
-      lineUserId: transportNumberData.receiver.token_line
-    };
-
     try {
-      
-      
-      // Update status to notified
+
+      if (!hardware.isHardwareReady()) {
+        console.log("[Controller]: ตรวจพบวัตถุ แต่ระบบยังไม่ว่าง!");
+
+        return res.status(201).json({
+          success: false,
+          message: "ระบบกำลังทำงานอยู่ กรุณารอซักครู่แล้วลองใหม่อีกครั้ง",
+        });
+      }
+      console.log("[Controller]: ตรวจพบพัสดุ! กำลังดำเนินรายการ...");
+
+      // Generate tracking number
+      const trackingNumber = generateTrackingNumber();
+
+      // Create transport record
+      const transportData = await prisma.transport.create({
+        data: {
+          transport_name: deliveryCompany,
+          status: "pending",
+        },
+      });
+
+      // Create transport number record
+      const transportNumberData = await prisma.transportNumber.create({
+        data: {
+          id_transport: transportData.id,
+          id_receiver: receiverData.id,
+          trackingNumber: trackingNumber,
+        },
+        include: {
+          transport: true,
+          receiver: true,
+        },
+      });
+
+      // Send LINE notification (simulate)
+      const newParcel = {
+        id: transportNumberData.transport.id,
+        trackingNumber,
+        roomNumber,
+        phoneNumber: receiverData.phone,
+        recipientName: receiverData.fullname,
+        deliveryCompany,
+        status: "pending",
+        lineUserId: transportNumberData.receiver.token_line,
+      };
       await prisma.transport.update({
         where: { id: transportData.id },
-        data: { status: 'notified' }
+        data: { status: "notified" },
       });
+
       await sendLineNotification(newParcel);
-      newParcel.status = 'notified';
-      
+
+      hardware.moveMotors(req.body.roomNumber);
+      newParcel.status = "notified";
+      return res.status(201).json({
+        success: true,
+        message: "Parcel created successfully",
+        parcel: {
+          id: transportNumberData.id,
+          trackingNumber: transportNumberData.trackingNumber,
+          roomNumber: transportNumberData.receiver.roomNumber,
+          recipientName: transportNumberData.receiver.fullname,
+          phoneNumber: transportNumberData.receiver.phone,
+          deliveryCompany: transportNumberData.transport.transport_name,
+          status: transportNumberData.transport.status,
+          createdAt: transportNumberData.createdAt,
+          updatedAt: transportNumberData.updatedAt,
+        },
+      });
+
     } catch (notificationError) {
       console.error("Notification error:", notificationError);
     }
-
-    res.status(201).json({
-      success: true,
-      message: 'Parcel created successfully',
-      parcel: {
-        id: transportNumberData.id,
-        trackingNumber: transportNumberData.trackingNumber,
-        roomNumber: transportNumberData.receiver.roomNumber,
-        recipientName: transportNumberData.receiver.fullname,
-        phoneNumber: transportNumberData.receiver.phone,
-        deliveryCompany: transportNumberData.transport.transport_name,
-        status: transportNumberData.transport.status,
-        createdAt: transportNumberData.createdAt,
-        updatedAt: transportNumberData.updatedAt
-      }
-    });
-
   } catch (error) {
     console.error("Create parcel error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
 
 async function doGetParcels(req, res) {
   try {
-    const { 
-      status, 
-      roomNumber, 
-      deliveryCompany, 
-      page = 1, 
+    const {
+      status,
+      roomNumber,
+      deliveryCompany,
+      page = 1,
       limit = 10,
-      search 
+      search,
     } = req.query;
-    
+
     const where = {};
-    
+
     // Filter by status
-    if (status && status !== 'all') {
+    if (status && status !== "all") {
       where.transport = {
-        status: status
+        status: status,
       };
     }
-    
+
     // Filter by room number
     if (roomNumber) {
       where.receiver = {
-        roomNumber: roomNumber
+        roomNumber: roomNumber,
       };
     }
-    
+
     // Filter by delivery company
     if (deliveryCompany) {
       where.transport = {
         ...where.transport,
         transport_name: {
           contains: deliveryCompany,
-          mode: 'insensitive'
-        }
+          mode: "insensitive",
+        },
       };
     }
-    
+
     // Search functionality
     if (search) {
       // Map Thai status labels to English status values
       const statusMapping = {
-        'รอรับพัสดุ': ['pending', 'notified'],
-        'รอรับ': ['pending', 'notified'],
-        'รับพัสดุแล้ว': ['collected'],
-        'รับแล้ว': ['collected'],
-        'ส่งคืนแล้ว': ['collected'],
-        'ส่งคืน': ['returned'],
+        รอรับพัสดุ: ["pending", "notified"],
+        รอรับ: ["pending", "notified"],
+        รับพัสดุแล้ว: ["collected"],
+        รับแล้ว: ["collected"],
+        ส่งคืนแล้ว: ["collected"],
+        ส่งคืน: ["returned"],
       };
-      
+
       // Check if search matches any Thai status
       let statusValues = [];
-      for (const [thaiLabel, englishStatuses] of Object.entries(statusMapping)) {
+      for (const [thaiLabel, englishStatuses] of Object.entries(
+        statusMapping,
+      )) {
         if (thaiLabel.includes(search) || search.includes(thaiLabel)) {
           statusValues = [...statusValues, ...englishStatuses];
         }
       }
-      
+
       const orConditions = [
-        { trackingNumber: { contains: search, mode: 'insensitive' } },
-        { receiver: { fullname: { contains: search, mode: 'insensitive' } } },
-        { receiver: { roomNumber: { contains: search, mode: 'insensitive' } } },
-        { transport: { transport_name: { contains: search, mode: 'insensitive' } } },
-        { transport: { status: { contains: search, mode: 'insensitive' } } }
+        { trackingNumber: { contains: search, mode: "insensitive" } },
+        { receiver: { fullname: { contains: search, mode: "insensitive" } } },
+        { receiver: { roomNumber: { contains: search, mode: "insensitive" } } },
+        {
+          transport: {
+            transport_name: { contains: search, mode: "insensitive" },
+          },
+        },
+        { transport: { status: { contains: search, mode: "insensitive" } } },
       ];
-      
+
       // Add status filter if Thai status was matched
       if (statusValues.length > 0) {
         orConditions.push({ transport: { status: { in: statusValues } } });
       }
-      
+
       where.OR = orConditions;
     }
-    
+
     // Get total count
     const totalCount = await prisma.transportNumber.count({ where });
-    
+
     // Get paginated data
     const transportNumbers = await prisma.transportNumber.findMany({
       where,
       include: {
         transport: true,
-        receiver: true
+        receiver: true,
       },
       orderBy: {
-        createdAt: 'desc'
+        createdAt: "desc",
       },
       skip: (page - 1) * parseInt(limit),
-      take: parseInt(limit)
+      take: parseInt(limit),
     });
-    
+
     // Transform data
-    const parcels = transportNumbers.map(tn => ({
+    const parcels = transportNumbers.map((tn) => ({
       id: tn.id,
       trackingNumber: tn.trackingNumber,
       roomNumber: tn.receiver.roomNumber,
@@ -247,36 +292,36 @@ async function doGetParcels(req, res) {
       deliveryCompany: tn.transport.transport_name,
       status: tn.transport.status,
       createdAt: tn.createdAt,
-      updatedAt: tn.updatedAt
+      updatedAt: tn.updatedAt,
     }));
-    
+
     // Get statistics
     const allTransports = await prisma.transport.findMany();
     const stats = {
       total: allTransports.length,
-      pending: allTransports.filter(t => t.status === 'pending').length,
-      notified: allTransports.filter(t => t.status === 'notified').length,
-      collected: allTransports.filter(t => t.status === 'collected').length,
-      returned: allTransports.filter(t => t.status === 'returned').length
+      pending: allTransports.filter((t) => t.status === "pending").length,
+      notified: allTransports.filter((t) => t.status === "notified").length,
+      collected: allTransports.filter((t) => t.status === "collected").length,
+      returned: allTransports.filter((t) => t.status === "returned").length,
     };
-    
+
     res.status(200).json({
       success: true,
       parcels,
       totalCount,
       currentPage: parseInt(page),
       totalPages: Math.ceil(totalCount / limit),
-      stats
+      stats,
     });
-    
-    console.log(`Parcels retrieved. Count: ${parcels.length}, Page: ${page}/${Math.ceil(totalCount / limit)}, Filters: ${JSON.stringify(req.query)}`);
-    console.log('Current stats:', stats);
-    console.log('Parcels:', parcels);
+
+    // console.log(`Parcels retrieved. Count: ${parcels.length}, Page: ${page}/${Math.ceil(totalCount / limit)}, Filters: ${JSON.stringify(req.query)}`);
+    // console.log('Current stats:', stats);
+    // console.log('Parcels:', parcels);
   } catch (error) {
     console.error("Get parcels error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -284,22 +329,22 @@ async function doGetParcels(req, res) {
 async function doGetParcelByTracking(req, res) {
   try {
     const { trackingNumber } = req.params;
-    
+
     const transportNumber = await prisma.transportNumber.findFirst({
       where: { trackingNumber },
       include: {
         transport: true,
-        receiver: true
-      }
+        receiver: true,
+      },
     });
-    
+
     if (!transportNumber) {
       return res.status(404).json({
         success: false,
-        message: 'Parcel not found'
+        message: "Parcel not found",
       });
     }
-    
+
     const parcel = {
       id: transportNumber.id,
       trackingNumber: transportNumber.trackingNumber,
@@ -309,19 +354,18 @@ async function doGetParcelByTracking(req, res) {
       deliveryCompany: transportNumber.transport.transport_name,
       status: transportNumber.transport.status,
       createdAt: transportNumber.createdAt,
-      updatedAt: transportNumber.updatedAt
+      updatedAt: transportNumber.updatedAt,
     };
-    
+
     res.status(200).json({
       success: true,
-      parcel
+      parcel,
     });
-    
   } catch (error) {
     console.error("Get parcel by tracking error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -330,47 +374,43 @@ async function doUpdateParcelStatus(req, res) {
   try {
     const { id } = req.params;
     const { status, notes } = req.body;
-    
-    console.log(`Updating parcel status - ID: ${id}, Status: ${status}`);
-    
+
     const transportNumber = await prisma.transportNumber.findUnique({
       where: { id: id }, // Remove parseInt() - keep as string
-      include: { transport: true, receiver: true }
+      include: { transport: true, receiver: true },
     });
-    
-    console.log(`Found transportNumber:`, transportNumber ? 'YES' : 'NO');
-    
+
     if (!transportNumber) {
-      console.log(`TransportNumber with id ${id} not found`);
       return res.status(404).json({
         success: false,
-        message: 'Parcel not found'
+        message: "Parcel not found",
       });
     }
-    
-    const validStatuses = ['pending', 'notified', 'collected', 'returned'];
+
+    const validStatuses = ["pending", "notified", "collected", "returned"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status. Valid statuses are: ' + validStatuses.join(', ')
+        message:
+          "Invalid status. Valid statuses are: " + validStatuses.join(", "),
       });
     }
-    
+
     // Update transport status
     await prisma.transport.update({
       where: { id: transportNumber.id_transport },
-      data: { status }
+      data: { status },
     });
-    
+
     // Get updated data
     const updatedTransportNumber = await prisma.transportNumber.findUnique({
       where: { id: id }, // Remove parseInt() - keep as string
       include: {
         transport: true,
-        receiver: true
-      }
+        receiver: true,
+      },
     });
-    
+
     const parcel = {
       id: updatedTransportNumber.id,
       trackingNumber: updatedTransportNumber.trackingNumber,
@@ -380,20 +420,19 @@ async function doUpdateParcelStatus(req, res) {
       deliveryCompany: updatedTransportNumber.transport.transport_name,
       status: updatedTransportNumber.transport.status,
       createdAt: updatedTransportNumber.createdAt,
-      updatedAt: updatedTransportNumber.updatedAt
+      updatedAt: updatedTransportNumber.updatedAt,
     };
-    
+
     res.status(200).json({
       success: true,
-      message: 'Parcel status updated successfully',
-      parcel
+      message: "Parcel status updated successfully",
+      parcel,
     });
-    
   } catch (error) {
     console.error("Update parcel status error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -401,31 +440,31 @@ async function doUpdateParcelStatus(req, res) {
 async function doDeleteParcel(req, res) {
   try {
     const { id } = req.params;
-    
+
     const transportNumber = await prisma.transportNumber.findUnique({
       where: { id: id }, // Remove parseInt() - keep as string
       include: {
         transport: true,
-        receiver: true
-      }
+        receiver: true,
+      },
     });
-    
+
     if (!transportNumber) {
       return res.status(404).json({
         success: false,
-        message: 'Parcel not found'
+        message: "Parcel not found",
       });
     }
-    
+
     // Delete transport number and transport record
     await prisma.transportNumber.delete({
-      where: { id: id } // Remove parseInt() - keep as string
+      where: { id: id }, // Remove parseInt() - keep as string
     });
-    
+
     await prisma.transport.delete({
-      where: { id: transportNumber.id_transport }
+      where: { id: transportNumber.id_transport },
     });
-    
+
     const deletedParcel = {
       id: transportNumber.id,
       trackingNumber: transportNumber.trackingNumber,
@@ -433,20 +472,19 @@ async function doDeleteParcel(req, res) {
       recipientName: transportNumber.receiver.fullname,
       phoneNumber: transportNumber.receiver.phone,
       deliveryCompany: transportNumber.transport.transport_name,
-      status: transportNumber.transport.status
+      status: transportNumber.transport.status,
     };
-    
+
     res.status(200).json({
       success: true,
-      message: 'Parcel deleted successfully',
-      parcel: deletedParcel
+      message: "Parcel deleted successfully",
+      parcel: deletedParcel,
     });
-    
   } catch (error) {
     console.error("Delete parcel error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -454,20 +492,21 @@ async function doDeleteParcel(req, res) {
 async function doBulkUpdateParcelStatus(req, res) {
   try {
     const { parcelIds, status } = req.body;
-    
+
     // Validation
     if (!parcelIds || !Array.isArray(parcelIds) || parcelIds.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Parcel IDs are required and must be an array'
+        message: "Parcel IDs are required and must be an array",
       });
     }
 
-    const validStatuses = ['pending', 'notified', 'collected', 'returned'];
+    const validStatuses = ["pending", "notified", "collected", "returned"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status. Valid statuses are: ' + validStatuses.join(', ')
+        message:
+          "Invalid status. Valid statuses are: " + validStatuses.join(", "),
       });
     }
 
@@ -475,53 +514,53 @@ async function doBulkUpdateParcelStatus(req, res) {
     const transportNumbers = await prisma.transportNumber.findMany({
       where: {
         id: {
-          in: parcelIds
-        }
+          in: parcelIds,
+        },
       },
       include: {
         transport: true,
-        receiver: true
-      }
+        receiver: true,
+      },
     });
 
     if (transportNumbers.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No parcels found for the provided IDs'
+        message: "No parcels found for the provided IDs",
       });
     }
 
     // Get unique transport IDs
-    const transportIds = transportNumbers.map(tn => tn.id_transport);
+    const transportIds = transportNumbers.map((tn) => tn.id_transport);
 
     // Update all transport statuses
     await prisma.transport.updateMany({
       where: {
         id: {
-          in: transportIds
-        }
+          in: transportIds,
+        },
       },
       data: {
         status: status,
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     });
 
     // Get updated data
     const updatedTransportNumbers = await prisma.transportNumber.findMany({
       where: {
         id: {
-          in: parcelIds
-        }
+          in: parcelIds,
+        },
       },
       include: {
         transport: true,
-        receiver: true
-      }
+        receiver: true,
+      },
     });
 
     // Transform data
-    const updatedParcels = updatedTransportNumbers.map(tn => ({
+    const updatedParcels = updatedTransportNumbers.map((tn) => ({
       id: tn.id,
       trackingNumber: tn.trackingNumber,
       roomNumber: tn.receiver.roomNumber,
@@ -530,21 +569,20 @@ async function doBulkUpdateParcelStatus(req, res) {
       deliveryCompany: tn.transport.transport_name,
       status: tn.transport.status,
       createdAt: tn.createdAt,
-      updatedAt: tn.updatedAt
+      updatedAt: tn.updatedAt,
     }));
 
     res.status(200).json({
       success: true,
       message: `Successfully updated ${updatedParcels.length} parcels to ${status}`,
       updatedCount: updatedParcels.length,
-      parcels: updatedParcels
+      parcels: updatedParcels,
     });
-
   } catch (error) {
     console.error("Bulk update parcel status error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -558,14 +596,14 @@ async function doGetParcelStatusHistory(req, res) {
       where: { id: id },
       include: {
         transport: true,
-        receiver: true
-      }
+        receiver: true,
+      },
     });
 
     if (!transportNumber) {
       return res.status(404).json({
         success: false,
-        message: 'Parcel not found'
+        message: "Parcel not found",
       });
     }
 
@@ -576,9 +614,9 @@ async function doGetParcelStatusHistory(req, res) {
         id: 1,
         status: transportNumber.transport.status,
         changedAt: transportNumber.transport.updatedAt,
-        changedBy: 'System', // ในอนาคตสามารถเพิ่ม admin tracking ได้
-        notes: null
-      }
+        changedBy: "System", // ในอนาคตสามารถเพิ่ม admin tracking ได้
+        notes: null,
+      },
     ];
 
     res.status(200).json({
@@ -589,16 +627,15 @@ async function doGetParcelStatusHistory(req, res) {
         roomNumber: transportNumber.receiver.roomNumber,
         recipientName: transportNumber.receiver.fullname,
         deliveryCompany: transportNumber.transport.transport_name,
-        currentStatus: transportNumber.transport.status
+        currentStatus: transportNumber.transport.status,
       },
-      history: history
+      history: history,
     });
-
   } catch (error) {
     console.error("Get parcel status history error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -611,7 +648,7 @@ const parcelsController = {
   updateParcelStatus: doUpdateParcelStatus,
   deleteParcel: doDeleteParcel,
   bulkUpdateParcelStatus: doBulkUpdateParcelStatus,
-  getParcelStatusHistory: doGetParcelStatusHistory
+  getParcelStatusHistory: doGetParcelStatusHistory,
 };
 
 module.exports = parcelsController;

@@ -36,21 +36,21 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
     setIsLoading(true);
 
     try {
-      console.log('Attempting login with:', { username, hasPassword: !!password });
+      // console.log('Attempting login with:', { username, hasPassword: !!password });
       
       const response = await apiService.adminLogin({ username, password });
       
-      console.log('Login response:', response);
+      // console.log('Login response:', response);
       
       if (response.success) {
-        console.log('Login successful, token stored');
+        // console.log('Login successful, token stored');
         onLogin();
         navigate("/dashboard");
       } else {
         setError(response.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
       }
     } catch (error) {
-      console.error("Admin login error:", error);
+      // console.error("Admin login error:", error);
       setError(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
     } finally {
       setIsLoading(false);

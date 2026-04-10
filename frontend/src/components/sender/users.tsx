@@ -11,7 +11,7 @@ import {
   Home,
   Truck,
   AlertTriangle,
-  Loader2,
+  Loader2, Sparkles,X
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -40,9 +40,9 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [showLockPopup, setShowLockPopup] = useState(false);
   const [lockLevel, setLockLevel] = useState(0);
-    // ผิด 1 ครั้ง = ล็อค 1 นาที
-    // ผิด 2 ครั้ง = ล็อค 5 นาที
-    // ผิด 3+ ครั้ง = ล็อค 15 นาทีคงที่ตลอดไป (ไม่เพิ่มขึ้นแล้ว)
+  // ผิด 1 ครั้ง = ล็อค 1 นาที
+  // ผิด 2 ครั้ง = ล็อค 5 นาที
+  // ผิด 3+ ครั้ง = ล็อค 15 นาทีคงที่ตลอดไป (ไม่เพิ่มขึ้นแล้ว)
 
   // API hooks
   const { recipients, recipientsByFloor, loading: recipientsLoading, error: recipientsError } = useRecipients();
@@ -283,10 +283,14 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
       if (response.success) {
         setCreatedParcel(response.parcel);
+        setSubmitError(null); // เคลียร์ error เก่าถ้ามี
         setIsComplete(true);
         setIsSubmitting(false);
       } else {
+        // เก็บข้อความ error จาก response.message
         setSubmitError(response.message || 'เกิดข้อผิดพลาดในการส่งพัสดุ');
+        setCreatedParcel(null); // หรือ response.parcel ตามที่คุณต้องการ
+        setIsComplete(true);
         setIsSubmitting(false);
       }
 
@@ -314,8 +318,8 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
   const formatPhoneNumber = (phone: string) => {
     const only = phone.replace(/\D/g, "");
     if (only.length <= 3) return only;
-    if (only.length <= 6) return `${only.slice(0,3)}-${only.slice(3)}`;
-    return `${only.slice(0,3)}-${only.slice(3,6)}-${only.slice(6,10)}`.slice(0, 13);
+    if (only.length <= 6) return `${only.slice(0, 3)}-${only.slice(3)}`;
+    return `${only.slice(0, 3)}-${only.slice(3, 6)}-${only.slice(6, 10)}`.slice(0, 13);
   };
 
   const displayPhone = phoneDigits || selectedRoom?.phone || "";
@@ -368,10 +372,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
       {accentCircles}
       {/* ══════════════ Navigation Bar ══════════════ */}
       <header className="relative z-50 px-8 py-5 flex justify-between items-center bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer group"
-            onClick={() => navigate('/user-home')}
-          >
+        <div
+          className="flex items-center gap-2.5 cursor-pointer group"
+          onClick={() => navigate('/user-home')}
+        >
           {/*logo*/}
           <div className="p-2 bg-[#1E3A8A] rounded-xl shadow-lg shadow-[#1E3A8A]/20 transition-transform duration-300 group-hover:scale-110">
             <Package className="w-6 h-6 text-white" />
@@ -386,13 +390,12 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
           {steps.map((step, index) => (
             <div key={step.number} className="flex items-center whitespace-nowrap">
               <div
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-all duration-300 shadow-lg ${
-                  currentStep > step.number
-                    ? "bg-gradient-to-br from-orange-400 to-yellow-400 text-white shadow-orange-300/40"
-                    : currentStep === step.number
-                      ? "bg-gradient-to-br from-blue-600 to-blue-400 text-white shadow-blue-400/40 ring-2 ring-blue-200/50"
-                      : "bg-blue-50 text-blue-300 shadow-none"
-                }`}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-all duration-300 shadow-lg ${currentStep > step.number
+                  ? "bg-gradient-to-br from-orange-400 to-yellow-400 text-white shadow-orange-300/40"
+                  : currentStep === step.number
+                    ? "bg-gradient-to-br from-blue-600 to-blue-400 text-white shadow-blue-400/40 ring-2 ring-blue-200/50"
+                    : "bg-blue-50 text-blue-300 shadow-none"
+                  }`}
               >
                 {currentStep > step.number ? (
                   <Check className="h-6 w-6" />
@@ -401,25 +404,23 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                 )}
               </div>
               <span
-                className={`ml-2 hidden text-sm font-semibold md:block transition-colors whitespace-nowrap ${
-                  currentStep >= step.number
-                    ? "text-blue-900"
-                    : "text-blue-300"
-                }`}
+                className={`ml-2 hidden text-sm font-semibold md:block transition-colors whitespace-nowrap ${currentStep >= step.number
+                  ? "text-blue-900"
+                  : "text-blue-300"
+                  }`}
               >
                 {step.title}
               </span>
               {index < steps.length - 1 && (
                 <div
-                  className={`mx-4 h-1.5 w-8 rounded-full md:w-16 transition-colors duration-300 ${
-                    currentStep > step.number ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-blue-100"
-                  }`}
+                  className={`mx-4 h-1.5 w-8 rounded-full md:w-16 transition-colors duration-300 ${currentStep > step.number ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-blue-100"
+                    }`}
                 />
               )}
             </div>
           ))}
         </div>
-        
+
         <Card className="shadow-2xl border border-blue-100/60 bg-white/85 backdrop-blur-sm relative overflow-hidden">
           {/* Decorative top gradient bar */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-amber-400 to-orange-400" />
@@ -446,9 +447,9 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
 
             {/* Step 1: Select Room */}
             {currentStep === 1 && (
-              <div className="space-y-4 "> 
+              <div className="space-y-4 ">
                 <p className="text-blue-400 text-base mb-3">กรุณาเลือกเลขห้องผู้รับพัสดุ</p>
-                
+
                 <div className="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-100/80 via-sky-50/60 to-amber-100/70 p-3 shadow-lg">
                   {Object.keys(recipientsByFloor).map((floor) => {
                     const isFloorDisabled = floor !== '1';
@@ -462,13 +463,12 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                               <button
                                 key={room.id}
                                 onClick={() => !isFloorDisabled && setSelectedRoom(room)}
-                                className={`rounded-xl border-2 py-3 px-6 text-center transition-all duration-200 shadow-md w-24 ${
-                                  isFloorDisabled
-                                    ? 'border-gray-300 bg-gray-200 text-gray-400 cursor-not-allowed'
-                                    : isSelected
-                                      ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white scale-105 shadow-blue-400/30'
-                                      : 'border-blue-200 bg-white text-blue-900 hover:bg-blue-50/60 hover:shadow-lg hover:border-blue-500 hover:-translate-y-0.5'
-                                }`}
+                                className={`rounded-xl border-2 py-3 px-6 text-center transition-all duration-200 shadow-md w-24 ${isFloorDisabled
+                                  ? 'border-gray-300 bg-gray-200 text-gray-400 cursor-not-allowed'
+                                  : isSelected
+                                    ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white scale-105 shadow-blue-400/30'
+                                    : 'border-blue-200 bg-white text-blue-900 hover:bg-blue-50/60 hover:shadow-lg hover:border-blue-500 hover:-translate-y-0.5'
+                                  }`}
                               >
                                 <div className="text-xl font-bold">{room.roomNumber}</div>
                               </button>
@@ -512,11 +512,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                         {/* 4 หลักสุดท้าย — ผู้ใช้กรอกเอง */}
                         <div className="flex gap-1">
                           {[0, 1, 2, 3].map((i) => (
-                            <div key={i} className={`flex h-10 w-9 items-center justify-center rounded-md border-2 text-base font-bold transition-all ${
-                              phoneDigits[i]
-                                ? 'bg-gradient-to-b from-blue-100 to-blue-50 border-blue-400 text-blue-900'
-                                : 'bg-white border-dashed border-blue-300 text-blue-300'
-                            }`}>
+                            <div key={i} className={`flex h-10 w-9 items-center justify-center rounded-md border-2 text-base font-bold transition-all ${phoneDigits[i]
+                              ? 'bg-gradient-to-b from-blue-100 to-blue-50 border-blue-400 text-blue-900'
+                              : 'bg-white border-dashed border-blue-300 text-blue-300'
+                              }`}>
                               {phoneDigits[i] ?? '?'}
                             </div>
                           ))}
@@ -524,10 +523,10 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* On-screen keypad */}
                   <div className="flex flex-wrap justify-center gap-2 max-w-[300px] mx-auto">
-                    {[1,2,3,4,5,6,7,8,9].map((n) => (
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                       <button
                         key={n}
                         onClick={() => {
@@ -572,31 +571,31 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                     </button>
                   </div>
 
-                    <div
-                      className={`
+                  <div
+                    className={`
                         overflow-hidden
                         transition-all duration-300 ease-in-out
                         ${phoneDigits.length > 0 ? "max-h-16 opacity-100 mt-4" : "max-h-0 opacity-0"}
                       `}
-                    >
-                      {phoneDigits.length > 0 && phoneDigits.length < 4 && (
-                        <p className="text-base text-orange-500 text-center font-semibold">
-                          กรุณากรอกเพิ่มอีก {4 - phoneDigits.length} หลัก
-                        </p>
-                      )}
+                  >
+                    {phoneDigits.length > 0 && phoneDigits.length < 4 && (
+                      <p className="text-base text-orange-500 text-center font-semibold">
+                        กรุณากรอกเพิ่มอีก {4 - phoneDigits.length} หลัก
+                      </p>
+                    )}
 
-                      {phoneDigits.length === 4 && !isPhoneValid && (
-                        <p className="text-base text-red-500 text-center font-semibold">
-                          หมายเลข 4 หลักสุดท้ายไม่ตรงกับข้อมูลในระบบ
-                        </p>
-                      )}
+                    {phoneDigits.length === 4 && !isPhoneValid && (
+                      <p className="text-base text-red-500 text-center font-semibold">
+                        หมายเลข 4 หลักสุดท้ายไม่ตรงกับข้อมูลในระบบ
+                      </p>
+                    )}
 
-                      {phoneDigits.length === 4 && isPhoneValid && (
-                        <p className="text-base text-green-600 text-center font-semibold">
-                          ยืนยันเบอร์โทรศัพท์สำเร็จ
-                        </p>
-                      )}
-                    </div>
+                    {phoneDigits.length === 4 && isPhoneValid && (
+                      <p className="text-base text-green-600 text-center font-semibold">
+                        ยืนยันเบอร์โทรศัพท์สำเร็จ
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -606,71 +605,67 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
               <div className="space-y-2">
                 <p className="text-blue-400 text-base mb-3">กรุณาเลือกบริษัทขนส่งที่นำส่งพัสดุ</p>
                 <div className="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-100/80 via-sky-50/60 to-amber-100/70 p-5 shadow-lg">
-                <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-                  {deliveryCompanies.map((courier) => {
-                    const isSelected = selectedCourier?.id === courier.id;
-                    return (
-                      <div
-                        key={courier.id}
-                        onClick={() => setSelectedCourier(courier)}
-                        className={`flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all cursor-pointer border-2 relative ${
-                          isSelected
+                  <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
+                    {deliveryCompanies.map((courier) => {
+                      const isSelected = selectedCourier?.id === courier.id;
+                      return (
+                        <div
+                          key={courier.id}
+                          onClick={() => setSelectedCourier(courier)}
+                          className={`flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all cursor-pointer border-2 relative ${isSelected
                             ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white shadow-lg shadow-blue-400/25'
                             : 'border-blue-100 bg-white text-blue-900 hover:border-blue-300 hover:shadow-md'
-                        }`}
-                      >
-                        {isSelected && (
-                          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                        <div
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white text-lg shadow-sm"
-                          style={{ backgroundColor: courier.color || '#D3D3D3' }}
+                            }`}
                         >
-                          🚚
+                          {isSelected && (
+                            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                          <div
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white text-lg shadow-sm"
+                            style={{ backgroundColor: courier.color || '#D3D3D3' }}
+                          >
+                            🚚
+                          </div>
+                          <span className={`text-sm font-bold leading-tight ${isSelected ? 'text-white' : 'text-blue-900'
+                            }`}>
+                            {courier.name}
+                          </span>
                         </div>
-                        <span className={`text-sm font-bold leading-tight ${
-                          isSelected ? 'text-white' : 'text-blue-900'
-                        }`}>
-                          {courier.name}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  
-                  {/* Other option */}
-                  {(() => {
-                    const isSelected = selectedCourier?.id === 'other';
-                    return (
-                      <div
-                        onClick={() => setSelectedCourier({ id: 'other', name: 'อื่นๆ', color: '#9CA3AF' } as DeliveryCompany)}
-                        className={`flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all cursor-pointer border-2 relative ${
-                          isSelected
+                      );
+                    })}
+
+                    {/* Other option */}
+                    {(() => {
+                      const isSelected = selectedCourier?.id === 'other';
+                      return (
+                        <div
+                          onClick={() => setSelectedCourier({ id: 'other', name: 'อื่นๆ', color: '#9CA3AF' } as DeliveryCompany)}
+                          className={`flex items-center gap-3 rounded-xl px-4 py-3.5 transition-all cursor-pointer border-2 relative ${isSelected
                             ? 'border-blue-400 bg-gradient-to-br from-blue-100 to-blue-500 text-white shadow-lg shadow-blue-400/25'
                             : 'border-blue-100 bg-white text-blue-900 hover:border-blue-300 hover:shadow-md'
-                        }`}
-                      >
-                        {isSelected && (
-                          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                        <div
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white text-lg shadow-sm"
-                          style={{ backgroundColor: '#9CA3AF' }}
+                            }`}
                         >
-                          🚚
+                          {isSelected && (
+                            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                          <div
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white text-lg shadow-sm"
+                            style={{ backgroundColor: '#9CA3AF' }}
+                          >
+                            🚚
+                          </div>
+                          <span className={`text-sm font-bold leading-tight ${isSelected ? 'text-white' : 'text-blue-900'
+                            }`}>
+                            อื่นๆ
+                          </span>
                         </div>
-                        <span className={`text-sm font-bold leading-tight ${
-                          isSelected ? 'text-white' : 'text-blue-900'
-                        }`}>
-                          อื่นๆ
-                        </span>
-                      </div>
-                    );
-                  })()}
-                </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             )}
@@ -741,7 +736,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                 <ArrowLeft className="h-4 w-4" />
                 {currentStep === 1 ? "กลับหน้าหลัก" : "ย้อนกลับ"}
               </Button>
-              
+
               {currentStep < 4 ? (
                 <Button
                   onClick={() => {
@@ -756,15 +751,7 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                     (currentStep === 2 && (phoneDigits.length !== 4 || remainingSeconds > 0)) ||
                     (currentStep === 3 && !selectedCourier)
                   }
-                  className={`
-                    gap-2 
-                    bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 
-                    hover:from-orange-500 hover:to-yellow-500 
-                    text-white shadow-lg shadow-orange-300/30 
-                    transition-all duration-200 rounded-xl px-6 py-2.5 font-semibold
-                    disabled:cursor-not-allowed
-                    disabled:opacity-60
-                  `}
+                  className="gap-2 bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white shadow-lg shadow-orange-300/30 transition-all duration-200 rounded-xl px-6 py-2.5 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   ถัดไป
                   <ArrowRight className="h-4 w-4" />
@@ -773,16 +760,9 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="gap-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-400/30 px-7 py-3 rounded-xl font-bold transition-all duration-200"
+                  className="gap-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-400/30 px-7 py-3 rounded-xl font-bold transition-all duration-200 disabled:opacity-50"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      กำลังดำเนินการ...
-                    </>
-                  ) : (
-                    "ยืนยันการส่งพัสดุ"
-                  )}
+                  ยืนยันการส่งพัสดุ
                 </Button>
               )}
             </div>
@@ -804,52 +784,245 @@ export function SenderFlow({ onBack }: SenderFlowProps) {
       )}
 
       {/* Success Popup */}
-      {isComplete && createdParcel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white/95 rounded-2xl shadow-xl px-10 py-8 max-w-md w-full flex flex-col items-center">
-            
-            <div className="flex items-center justify-center mb-6">
-              <div className="w-32 h-32 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
-                <Check className="w-20 h-20 text-white" strokeWidth={3} />
+      {isComplete && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-white/90 backdrop-blur-xl p-4">
+          {/* Animated background orbs */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div
+              className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse ${submitError ? "bg-red-400/20" : "bg-emerald-400/20"
+                }`}
+            />
+            <div
+              className={`absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full blur-3xl animate-pulse delay-700 ${submitError ? "bg-red-300/20" : "bg-green-400/20"
+                }`}
+            />
+          </div>
+
+          <div className="relative max-w-md w-full animate-in zoom-in-95 fade-in duration-500">
+            {/* Glow effect */}
+            {/* <div
+          className={`absolute -inset-1 rounded-3xl blur-lg opacity-50 animate-pulse ${
+            submitError
+              ? "bg-gradient-to-r from-red-400 via-red-500 to-red-400"
+              : "bg-gradient-to-r from-emerald-400 via-green-400 to-emerald-400"
+          }`}
+        /> */}
+
+            {/* Main card */}
+            <div className={`relative bg-white rounded-3xl p-8 border shadow-2xl ${submitError ? "border-red-100 shadow-red-500/10" : "border-emerald-100 shadow-emerald-500/10"}`}>
+              {/* Top accent line */}
+              {/* <div
+            className={`absolute top-0 left-1/2 -translate-x-1/2 w-24 h-1 rounded-full ${submitError
+                ? "bg-gradient-to-r from-transparent via-red-500 to-transparent"
+                : "bg-gradient-to-r from-transparent via-emerald-500 to-transparent"
+              }`}
+          /> */}
+
+              {/* Icon container */}
+              <div className="flex justify-center mb-6">
+                <div className="relative">
+                  {/* Outer ring - success pulse animation */}
+                  <div
+                    className={`absolute -inset-6 rounded-full animate-ping opacity-20 ${submitError ? "bg-red-500" : "bg-emerald-500"
+                      }`}
+                    style={{ animationDuration: "2s" }}
+                  />
+
+                  {/* Middle ring */}
+                  <div
+                    className={`absolute -inset-4 rounded-full border-2 ${submitError ? "border-red-300/50" : "border-emerald-300/50"
+                      }`}
+                  />
+
+                  {/* Inner ring */}
+                  <div
+                    className={`absolute -inset-2 rounded-full border ${submitError ? "border-red-400/50" : "border-green-400/50"
+                      }`}
+                  />
+
+                  {/* Icon */}
+                  <div
+                    className={`relative w-24 h-24 rounded-full flex items-center justify-center shadow-lg ${submitError
+                      ? "bg-gradient-to-br from-red-500 to-red-600 shadow-red-500/30"
+                      : "bg-gradient-to-br from-emerald-500 to-green-500 shadow-emerald-500/30"
+                      }`}
+                  >
+                    {submitError ? (
+                      <X className="w-12 h-12 text-white" strokeWidth={3} />
+                    ) : (
+                      <Check className="w-12 h-12 text-white" strokeWidth={3} />
+                    )}
+
+                    {/* Sparkle */}
+                    {!submitError && (
+                      <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-emerald-400 animate-pulse" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Title */}
+              <h3
+                className={`text-2xl font-bold text-center mb-2 tracking-tight ${submitError ? "text-red-600" : "text-emerald-700"
+                  }`}
+              >
+                {submitError ? "เกิดข้อผิดพลาด" : "ส่งพัสดุสำเร็จ!"}
+              </h3>
+              <p className="text-slate-500 text-center text-sm mb-6">
+                {submitError ? submitError : "ระบบได้แจ้งเตือนไปยังผู้รับพัสดุเรียบร้อยแล้ว"}
+              </p>
+
+              {/* Tracking Number Card */}
+              {!submitError && createdParcel && (
+                <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl p-4 border border-emerald-200 mb-6">
+                  <p className="text-emerald-600 text-center text-sm font-medium mb-1">
+                    หมายเลขติดตาม
+                  </p>
+                  <p className="text-xl font-bold text-slate-800 text-center tracking-wider">
+                    {createdParcel.trackingNumber}
+                  </p>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200" />
+                </div>
+                <div className="relative flex justify-center">
+                  <div className={`w-2 h-2 rounded-full ${submitError ? "bg-red-400" : "bg-emerald-400"}`} />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleFullReset()
+                    navigate("/user-home")
+                  }}
+                  className="flex-1 h-12 border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 font-semibold rounded-xl transition-all duration-200 group"
+                >
+                  <Home className="w-4 h-4 mr-2 group-hover:-translate-x-0.5 transition-transform" />
+                  กลับหน้าหลัก
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    handleFullReset()
+                  }}
+                  className={`flex-1 h-12 font-semibold rounded-xl transition-all duration-200 group shadow-lg text-white ${submitError
+                    ? "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/25"
+                    : "bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 shadow-emerald-500/25"
+                    }`}
+                >
+                  {submitError ? "ลองใหม่อีกครั้ง" : "ส่งพัสดุชิ้นถัดไป"}
+                  <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
+                </Button>
+              </div>
+
+              {/* Bottom decoration */}
+              <div className="flex justify-center gap-2 mt-6">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className={`w-1.5 h-1.5 rounded-full ${submitError ? "bg-red-300" : "bg-emerald-300"
+                      }`}
+                    style={{
+                      opacity: 1 - i * 0.15,
+                    }}
+                  />
+                ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-white/90 backdrop-blur-xl">
+          {/* Animated background orbs */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-400/20 rounded-full blur-3xl animate-pulse" />
+            <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-amber-400/20 rounded-full blur-3xl animate-pulse delay-700" />
+          </div>
 
-            <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
-              ส่งพัสดุสำเร็จ!
-            </h2>
+          <div className="relative max-w-md w-full mx-4 animate-in zoom-in-95 fade-in duration-500">
+            {/* Glow effect */}
+            {/* <div className="absolute -inset-1 bg-gradient-to-r from-orange-400 via-amber-400 to-orange-400 rounded-3xl blur-lg opacity-50 animate-pulse" /> */}
 
-            <p className="text-lg text-gray-400 mb-4 text-center">
-              ระบบได้แจ้งเตือนไปยังผู้รับพัสดุเรียบร้อยแล้ว
-            </p>
+            {/* Main card */}
+            <div className="relative bg-white rounded-3xl p-8 border border-orange-100 shadow-2xl shadow-orange-500/10">
+              {/* Top accent line */}
+              {/* <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent rounded-full" /> */}
 
-            {/* Tracking Number */}
-            <div className="bg-blue-50 rounded-lg p-4 mb-6 w-full">
-              <p className="text-blue-600 text-center">หมายเลขติดตาม</p>
-              <p className="text-xl font-bold text-blue-900 text-center tracking-wider">
-                {createdParcel.trackingNumber}
+              {/* Icon container */}
+              <div className="flex justify-center mb-6">
+                <div className="relative">
+                  {/* Outer ring */}
+                  <div className="absolute -inset-4 border-2 border-orange-300/50 rounded-full animate-[spin_4s_linear_infinite]">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-orange-500 rounded-full" />
+                  </div>
+
+                  {/* Middle ring */}
+                  <div className="absolute -inset-2 border border-amber-400/50 rounded-full animate-[spin_3s_linear_infinite_reverse]">
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                  </div>
+
+                  {/* Icon */}
+                  <div className="relative w-20 h-20 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+                    <Package className="w-10 h-10 text-white" />
+
+                    {/* Sparkle */}
+                    <Sparkles className="absolute -top-2 -right-2 w-5 h-5 text-orange-400 animate-pulse" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Title */}
+              <h3 className="text-2xl font-bold text-center text-slate-800 mb-2 tracking-tight">
+                กำลังประมวลผล
+              </h3>
+              <p className="text-slate-500 text-center text-sm mb-6">
+                ระบบกำลังตรวจสอบข้อมูลพัสดุของคุณ
               </p>
-            </div>
 
-            <hr className="mb-5 border-t border-gray-300 w-full" />
+              {/* Message card */}
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-4">
+                <p className="text-lg font-semibold text-center text-white">
+                  {"กรุณาวางพัสดุของคุณ"}
+                </p>
+              </div>
 
-            <div className="flex gap-3 w-full">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleFullReset();
-                  navigate('/user-home');
-                }}
-                className="flex-1 border-blue-400 text-blue-600 bg-white hover:bg-blue-50 hover:border-blue-500 font-semibold shadow-none"
-              >
-                กลับหน้าหลัก
-              </Button>
+              {/* Progress bar */}
+              <div className="mt-8">
+                <div className="flex justify-between text-xs text-slate-400 mb-2">
+                  <span>กำลังดำเนินการ...</span>
+                  <span className="animate-pulse">โปรดรอสักครู่</span>
+                </div>
+                <div className="h-2 bg-orange-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full animate-[shimmer_2s_infinite]"
+                    style={{
+                      backgroundSize: '200% 100%',
+                    }}
+                  />
+                </div>
+              </div>
 
-              <Button
-                onClick={handleFullReset}
-                className="flex-1 bg-gradient-to-r from-blue-500 to-blue-400 hover:from-blue-600 hover:to-blue-500 text-white font-semibold shadow-md"
-              >
-                ส่งพัสดุชิ้นถัดไป
-              </Button>
+              {/* Steps indicator */}
+              <div className="flex justify-center gap-2 mt-6">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-2 h-2 rounded-full bg-orange-500 animate-bounce"
+                    style={{
+                      animationDelay: `${i * 150}ms`,
+                      animationDuration: '1s',
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
